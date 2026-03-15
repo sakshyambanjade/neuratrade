@@ -30,6 +30,8 @@ VITE_API_KEY=dev-key
 VITE_WS_URL=ws://localhost:8000/ws
 ```
 
+First load convenience: the `/candles` endpoint now seeds recent candles from Binance/Coingecko when the database is empty, so the chart renders even before running `python -m workers.trading_loop`.
+
 ## Notes
 - SQLite runs in WAL mode with busy timeout; single DB file at `DB_PATH`.
 - REST/WS require `x-api-key` (or `?key=` for WS).

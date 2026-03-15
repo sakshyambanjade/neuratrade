@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
 import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
-import * as LWC from "lightweight-charts";
+import { createChart, CandlestickSeries, createSeriesMarkers } from "lightweight-charts";
+import type { IChartApi, ISeriesApi, ISeriesMarkersPluginApi, Time } from "lightweight-charts";
 import {
   getHealth,
   getStatus,
@@ -40,8 +41,9 @@ export default function App() {
   const [memories, setMemories] = useState<any[]>([]);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const chartRef = useRef<HTMLDivElement | null>(null);
-  const chartObj = useRef<any>(null);
-  const candleSeries = useRef<any>(null);
+  const chartObj = useRef<IChartApi | null>(null);
+  const candleSeries = useRef<ISeriesApi<"Candlestick", Time> | null>(null);
+  const seriesMarkers = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const markers = useRef<any[]>([]);
   const { status: wsStatus, lastMessage } = useWebSocket();
   const [noCandles, setNoCandles] = useState(false);
@@ -106,15 +108,16 @@ export default function App() {
   const initChart = (candles: Candle[]) => {
     if (!chartRef.current) return;
     if (!chartObj.current) {
-      const chart = LWC.createChart(chartRef.current, {
-        width: chartRef.current.clientWidth || 920,
+      const width = chartRef.current.clientWidth || 920;
+      const api = createChart(chartRef.current, {
+        width,
         height: 340,
         layout: { background: { color: "#0e142b" }, textColor: "#d8e0ff" },
         grid: { vertLines: { color: "#1f2a4a" }, horzLines: { color: "#1f2a4a" } },
         timeScale: { timeVisible: true, secondsVisible: false },
       });
-      chartObj.current = chart;
-      candleSeries.current = (chart as any).addCandlestickSeries({
+      chartObj.current = api;
+      candleSeries.current = api.addSeries(CandlestickSeries, {
         upColor: "#16c784",
         downColor: "#ef4444",
         borderUpColor: "#16c784",
@@ -122,19 +125,13 @@ export default function App() {
         wickUpColor: "#16c784",
         wickDownColor: "#ef4444",
       });
+      seriesMarkers.current = createSeriesMarkers(candleSeries.current, []);
       const handleResize = () => {
         if (chartRef.current && chartObj.current) {
-          chartObj.current.resize(chartRef.current.clientWidth || 920, 340);
+          chartObj.current.resize(chartRef.current.clientWidth || width, 340);
         }
       };
       window.addEventListener("resize", handleResize);
-      // cleanup
-      return () => {
-        window.removeEventListener("resize", handleResize);
-        chart.remove();
-        chartObj.current = null;
-        candleSeries.current = null;
-      };
     }
     if (candles.length && candleSeries.current) {
       setNoCandles(false);
@@ -157,21 +154,19 @@ export default function App() {
     markers.current = tradeList
       .filter((t) => t.opened_at)
       .map((t) => ({
-        time: t.opened_at,
+        time: t.opened_at as any,
         position: t.action === "BUY" ? "belowBar" : "aboveBar",
         color: t.pnl_pct && t.pnl_pct < 0 ? "#ef4444" : "#16c784",
         shape: t.action === "BUY" ? "arrowUp" : "arrowDown",
         text: `${t.action} ${t.entry_price?.toFixed(0)}`,
       }));
-    if (candleSeries.current) {
-      candleSeries.current.setMarkers(markers.current);
-    }
+    seriesMarkers.current?.setMarkers(markers.current);
   };
 
   const addMarker = (trade: any, kind: "open" | "close") => {
     markers.current = [
       {
-        time: trade.timestamp || trade.opened_at,
+        time: (trade.timestamp || trade.opened_at) as any,
         position: kind === "open" ? "belowBar" : "aboveBar",
         color: kind === "open" ? "#0ea5e9" : (trade.pnl_pct ?? 0) >= 0 ? "#16c784" : "#ef4444",
         shape: kind === "open" ? "arrowUp" : "arrowDown",
@@ -179,9 +174,7 @@ export default function App() {
       },
       ...markers.current,
     ].slice(0, 200);
-    if (candleSeries.current) {
-      candleSeries.current.setMarkers(markers.current);
-    }
+    seriesMarkers.current?.setMarkers(markers.current);
   };
 
   useEffect(() => {
@@ -307,7 +300,7 @@ export default function App() {
           {snapshots.length === 0 ? (
             <p className="muted">No snapshots yet.</p>
           ) : (
-            <div style={{ width: "100%", height: 240 }}>
+            <div style={{ width: "100%", height: 240, minWidth: 320 }}>
               <ResponsiveContainer>
                 <AreaChart data={snapshots}>
                   <XAxis dataKey="ts" tickFormatter={(t) => format(t * 1000, "MM-dd")} />
