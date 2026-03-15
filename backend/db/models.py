@@ -53,3 +53,13 @@ class PortfolioSnapshot(Base):
     btc_held = Column(Float)
     total_value = Column(Float)
     daily_pnl = Column(Float)
+
+
+class DecisionRecord(Base):
+    __tablename__ = "decisions"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ts = Column(Integer, nullable=False)
+    action = Column(String, nullable=False)
+    confidence = Column(Float, nullable=False)
+    reasoning = Column(Text, nullable=True)
+    memories_used = Column(Text, nullable=True)

@@ -47,3 +47,6 @@ ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",
 # Misc
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 HEARTBEAT_SECONDS = int(os.getenv("HEARTBEAT_SECONDS", 420))  # alert threshold for ticks
+
+# Event bus
+REDIS_URL = os.getenv("REDIS_URL", "")

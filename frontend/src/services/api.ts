@@ -18,6 +18,16 @@ export async function getStatus() {
   return data;
 }
 
+export async function getPortfolio() {
+  const { data } = await client.get("/portfolio");
+  return data;
+}
+
+export async function getIndicators() {
+  const { data } = await client.get("/indicators/latest");
+  return data;
+}
+
 export async function getCandles(limit = 200) {
   const { data } = await client.get("/candles", { params: { limit } });
   return data;
@@ -25,5 +35,20 @@ export async function getCandles(limit = 200) {
 
 export async function getTrades(limit = 100) {
   const { data } = await client.get("/trades", { params: { limit } });
+  return data;
+}
+
+export async function getDecisions(limit = 20) {
+  const { data } = await client.get("/decisions", { params: { limit } });
+  return data;
+}
+
+export async function getBrainStatus() {
+  const { data } = await client.get("/brain/status");
+  return data;
+}
+
+export async function getBrainMemories(query = "", k = 5) {
+  const { data } = await client.get("/brain/memories", { params: { query, k } });
   return data;
 }

@@ -5,6 +5,7 @@ import time
 from typing import List
 import httpx
 from config import BINANCE_BASE, COINGECKO_BASE, SYMBOL
+from db import models
 
 
 def _binance_klines(limit: int = 200) -> List[dict]:
@@ -58,6 +59,37 @@ def get_candles(limit: int = 200) -> List[dict]:
         return _binance_klines(limit)
     except Exception:
         return _coingecko_ohlc(limit)
+
+
+def persist_candles(db, candles: List[dict]):
+    for c in candles:
+        db.merge(
+            models.Candle(
+                ts=c["ts"],
+                open=c["open"],
+                high=c["high"],
+                low=c["low"],
+                close=c["close"],
+                volume=c.get("volume"),
+                source=c.get("source", "binance"),
+            )
+        )
+    db.commit()
+
+
+def latest_candle(db) -> dict:
+    row = db.query(models.Candle).order_by(models.Candle.ts.desc()).first()
+    if not row:
+        return {}
+    return {
+        "ts": row.ts,
+        "open": row.open,
+        "high": row.high,
+        "low": row.low,
+        "close": row.close,
+        "volume": row.volume,
+        "source": row.source,
+    }
 
 
 def latest_price() -> float:

@@ -1,6 +1,7 @@
 from typing import Set
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Header
 from config import API_KEY, WS_PATH
+from utils.event_bus import subscribe
 
 router = APIRouter()
 
@@ -28,6 +29,17 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+
+
+def _fanout(event: dict):
+    import asyncio
+
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        loop.create_task(manager.broadcast(event))
+
+
+subscribe(_fanout)
 
 
 @router.websocket(WS_PATH)

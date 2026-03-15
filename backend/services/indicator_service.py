@@ -60,6 +60,12 @@ def latest_indicators(candles: List[dict]) -> dict:
         return {}
     macd_line, macd_signal = macd(closes)
     bb_upper, bb_lower = bollinger(closes)
+    vols = [c.get("volume") or 0 for c in candles]
+    vol_ratio = 0
+    if vols and len(vols) >= 20:
+        recent = vols[-1]
+        avg20 = sum(vols[-20:]) / 20
+        vol_ratio = recent / avg20 if avg20 else 0
     return {
         "price": closes[-1],
         "rsi": rsi(closes),
@@ -69,5 +75,6 @@ def latest_indicators(candles: List[dict]) -> dict:
         "bb_lower": bb_lower,
         "ema9": ema(closes[-30:], 9),
         "ema21": ema(closes[-50:], 21),
-        "volume_ratio": 1.0,  # placeholder
+        "volume_ratio": vol_ratio,
+        "phase": "live",
     }
