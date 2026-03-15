@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
-import { createChart, CandlestickSeries } from "lightweight-charts";
-import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
+import * as LWC from "lightweight-charts";
 import {
   getHealth,
   getStatus,
@@ -40,12 +40,12 @@ export default function App() {
   const [memories, setMemories] = useState<any[]>([]);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const chartRef = useRef<HTMLDivElement | null>(null);
-  const chartApi = useRef<any>(null);
+  const chartObj = useRef<any>(null);
   const candleSeries = useRef<any>(null);
   const markers = useRef<any[]>([]);
   const { status: wsStatus, lastMessage } = useWebSocket();
+  const [noCandles, setNoCandles] = useState(false);
 
-  // Initial load
   useEffect(() => {
     getHealth().then(() => setHealth("ok")).catch(() => setHealth("unavailable"));
     getStatus().then(setStatus).catch(() => setStatus(null));
@@ -59,7 +59,6 @@ export default function App() {
     getSnapshots().then(setSnapshots).catch(() => setSnapshots([]));
   }, []);
 
-  // Live updates
   useEffect(() => {
     if (lastMessage?.type === "tick") {
       setLastTick(lastMessage as TickEvent);
@@ -90,34 +89,68 @@ export default function App() {
     }
   }, [lastMessage]);
 
+  // Refresh data when WS connects (helps initial hydrate)
+  useEffect(() => {
+    if (wsStatus === "ok") {
+      getStatus().then(setStatus).catch(() => {});
+      getCandles().then((c: Candle[]) => {
+        initChart(c);
+        if (!c.length) setNoCandles(true);
+      }).catch(() => {});
+    }
+  }, [wsStatus]);
+
   const price = useMemo(() => lastTick?.price ?? status?.price ?? 0, [lastTick, status]);
+  const wsBadge = wsStatus === "ok" ? "badge success" : wsStatus === "connecting" ? "badge warn" : "badge danger";
 
   const initChart = (candles: Candle[]) => {
     if (!chartRef.current) return;
-    chartApi.current = createChart(chartRef.current, {
-      width: chartRef.current.clientWidth,
-      height: 360,
-      layout: { background: { color: "#0f172e" }, textColor: "#d8e0ff" },
-      grid: { vertLines: { color: "#1f2a4a" }, horzLines: { color: "#1f2a4a" } },
-      timeScale: { timeVisible: true, secondsVisible: true },
-    });
-    candleSeries.current = chartApi.current.addSeries(CandlestickSeries, {
-      upColor: "#16c784",
-      downColor: "#ef4444",
-      borderUpColor: "#16c784",
-      borderDownColor: "#ef4444",
-      wickUpColor: "#16c784",
-      wickDownColor: "#ef4444",
-    });
-    candleSeries.current.setData(
-      candles.map((c) => ({
-        time: c.time as any,
-        open: c.open,
-        high: c.high,
-        low: c.low,
-        close: c.close,
-      })),
-    );
+    if (!chartObj.current) {
+      const chart = LWC.createChart(chartRef.current, {
+        width: chartRef.current.clientWidth || 920,
+        height: 340,
+        layout: { background: { color: "#0e142b" }, textColor: "#d8e0ff" },
+        grid: { vertLines: { color: "#1f2a4a" }, horzLines: { color: "#1f2a4a" } },
+        timeScale: { timeVisible: true, secondsVisible: false },
+      });
+      chartObj.current = chart;
+      candleSeries.current = (chart as any).addCandlestickSeries({
+        upColor: "#16c784",
+        downColor: "#ef4444",
+        borderUpColor: "#16c784",
+        borderDownColor: "#ef4444",
+        wickUpColor: "#16c784",
+        wickDownColor: "#ef4444",
+      });
+      const handleResize = () => {
+        if (chartRef.current && chartObj.current) {
+          chartObj.current.resize(chartRef.current.clientWidth || 920, 340);
+        }
+      };
+      window.addEventListener("resize", handleResize);
+      // cleanup
+      return () => {
+        window.removeEventListener("resize", handleResize);
+        chart.remove();
+        chartObj.current = null;
+        candleSeries.current = null;
+      };
+    }
+    if (candles.length && candleSeries.current) {
+      setNoCandles(false);
+      candleSeries.current.setData(
+        candles.map((c) => ({
+          time: c.time as any,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+        })),
+      );
+      refreshMarkers(trades);
+    } else {
+      setNoCandles(true);
+    }
   };
 
   const refreshMarkers = (tradeList: Trade[]) => {
@@ -159,19 +192,23 @@ export default function App() {
 
   return (
     <div className="page">
-      <header className="topbar">
+      <header className="hero">
         <div>
           <div className="eyebrow">Backend</div>
-          <div className="pill">{health}</div>
+          <span className={`badge ${health === "ok" ? "success" : "danger"}`}>{health}</span>
         </div>
         <div>
           <div className="eyebrow">WebSocket</div>
-          <div className={`pill ${wsStatus}`}>{wsStatus}</div>
+          <span className={wsBadge}>{wsStatus}</span>
         </div>
         <div>
           <div className="eyebrow">BTC Price</div>
           <div className="price">${price?.toFixed(2)}</div>
           {lastTick && <div className="muted">tick @ {format(lastTick.timestamp * 1000, "HH:mm:ss")}</div>}
+        </div>
+        <div>
+          <div className="eyebrow">Open Trades</div>
+          <div className="price">{status?.open_trades ?? 0}</div>
         </div>
       </header>
 
@@ -181,16 +218,24 @@ export default function App() {
             <h1>Live BTC Candles</h1>
             <div className="muted">Markers show buys/exits</div>
           </div>
-          <div ref={chartRef} className="chart" />
+          <div className="chart-wrap">
+            <div ref={chartRef} className="chart" />
+            {noCandles && <div className="chart-placeholder">No candles yet</div>}
+          </div>
         </main>
 
         <aside className="panel side">
           <div className="stat">
             <div className="label">Portfolio Value</div>
             <div className="value">${portfolio?.total_value?.toFixed(2) ?? "—"}</div>
-            <div className="muted">Cash ${portfolio?.cash?.toFixed(2) ?? "—"} · BTC {portfolio?.btc_held?.toFixed?.(4) ?? "—"}</div>
+            <div className="muted">
+              Cash ${portfolio?.cash?.toFixed(2) ?? "—"} · BTC {portfolio?.btc_held?.toFixed?.(4) ?? "—"}
+            </div>
+            {portfolio?.open_trade && (
+              <div className="muted">Open #{portfolio.open_trade.id} @ ${portfolio.open_trade.entry_price?.toFixed(0)}</div>
+            )}
           </div>
-          <div className="stat">
+          <div className="stat pills">
             <div className="label">Indicators</div>
             <div className="pill tight">RSI {indicators?.rsi?.toFixed(1) ?? "—"}</div>
             <div className="pill tight">MACD {indicators?.macd?.toFixed(4) ?? "—"}</div>
@@ -205,35 +250,11 @@ export default function App() {
         </aside>
       </section>
 
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Equity Curve</h2>
-          <div className="muted">Last {snapshots.length} points</div>
-        </div>
-        {snapshots.length === 0 ? (
-          <p className="muted">No snapshots yet.</p>
-        ) : (
-          <div style={{ width: "100%", height: 240 }}>
-            <ResponsiveContainer>
-              <AreaChart data={snapshots}>
-                <XAxis dataKey="ts" tickFormatter={(t) => format(t * 1000, "MM-dd")} />
-                <YAxis tickFormatter={(v) => `$${Math.round(v)}`} />
-                <Tooltip
-                  contentStyle={{ background: "#0f172e", border: "1px solid #1f2a4a" }}
-                  labelFormatter={(t) => format((t as number) * 1000, "MM-dd HH:mm")}
-                  formatter={(value: any) => [`$${Number(value).toFixed(2)}`, "Equity"]}
-                />
-                <Area type="monotone" dataKey="total_value" stroke="#16c784" fill="#0f3122" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </section>
-
       <section className="grid two">
         <div className="panel">
           <div className="panel-head">
             <h2>Recent Trades</h2>
+            <div className="muted">{trades.length} rows</div>
           </div>
           {trades.length === 0 ? (
             <p className="muted">No trades yet.</p>
@@ -262,6 +283,7 @@ export default function App() {
         <div className="panel">
           <div className="panel-head">
             <h2>Decisions</h2>
+            <div className="muted">Last {decisions.length}</div>
           </div>
           {decisions.slice(0, 10).map((d, i) => (
             <div className="card-line" key={i}>
@@ -276,23 +298,52 @@ export default function App() {
         </div>
       </section>
 
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Memories</h2>
-          <div className="muted">Top recalls</div>
-        </div>
-        {memories.length === 0 ? (
-          <p className="muted">None loaded.</p>
-        ) : (
-          <div className="mem-grid">
-            {memories.map((m, idx) => (
-              <div className="mem-card" key={idx}>
-                <div className="eyebrow">{m.category ?? "memory"}</div>
-                <div className="reason">{m.content ?? ""}</div>
-              </div>
-            ))}
+      <section className="grid two">
+        <div className="panel">
+          <div className="panel-head">
+            <h2>Equity Curve</h2>
+            <div className="muted">Last {snapshots.length} points</div>
           </div>
-        )}
+          {snapshots.length === 0 ? (
+            <p className="muted">No snapshots yet.</p>
+          ) : (
+            <div style={{ width: "100%", height: 240 }}>
+              <ResponsiveContainer>
+                <AreaChart data={snapshots}>
+                  <XAxis dataKey="ts" tickFormatter={(t) => format(t * 1000, "MM-dd")} />
+                  <YAxis tickFormatter={(v) => `$${Math.round(v)}`} />
+                  <Tooltip
+                    contentStyle={{ background: "#0f172e", border: "1px solid #1f2a4a" }}
+                    labelFormatter={(t) => format((t as number) * 1000, "MM-dd HH:mm")}
+                    formatter={(value: any) => [`$${Number(value).toFixed(2)}`, "Equity"]}
+                  />
+                  <Legend />
+                  <Area type="monotone" dataKey="total_value" stroke="#16c784" fill="#0f3122" strokeWidth={2} name="Equity" />
+                  <Area type="monotone" dataKey="cash" stroke="#38bdf8" fill="#0b1f33" strokeWidth={1} name="Cash" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+
+        <div className="panel">
+          <div className="panel-head">
+            <h2>Memories</h2>
+            <div className="muted">Top recalls</div>
+          </div>
+          {memories.length === 0 ? (
+            <p className="muted">None loaded.</p>
+          ) : (
+            <div className="mem-grid">
+              {memories.map((m, idx) => (
+                <div className="mem-card" key={idx}>
+                  <div className="eyebrow">{m.category ?? "memory"}</div>
+                  <div className="reason">{m.content ?? ""}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </section>
     </div>
   );

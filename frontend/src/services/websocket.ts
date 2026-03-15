@@ -1,50 +1,75 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 const WS_URL = (import.meta.env.VITE_WS_URL as string) ?? "ws://localhost:8000/ws";
 const API_KEY = import.meta.env.VITE_API_KEY ?? "dev-key";
 
 type WsStatus = "connecting" | "ok" | "closed";
 
+let sharedWs: WebSocket | null = null;
+let sharedBackoff = 800;
+const listeners = new Set<(data: any) => void>();
+let statusState: WsStatus = "connecting";
+const statusListeners = new Set<(s: WsStatus) => void>();
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+const notifyStatus = (s: WsStatus) => {
+  statusState = s;
+  statusListeners.forEach((fn) => fn(s));
+};
+
+const ensureSocket = () => {
+  if (sharedWs && (sharedWs.readyState === WebSocket.OPEN || sharedWs.readyState === WebSocket.CONNECTING)) return;
+  try {
+    sharedWs = new WebSocket(`${WS_URL}?key=${API_KEY}`);
+  } catch {
+    scheduleReconnect();
+    return;
+  }
+  notifyStatus("connecting");
+  sharedWs.onopen = () => {
+    sharedBackoff = 800;
+    notifyStatus("ok");
+  };
+  sharedWs.onclose = () => {
+    notifyStatus("closed");
+    scheduleReconnect();
+  };
+  sharedWs.onerror = () => {
+    notifyStatus("closed");
+    scheduleReconnect();
+  };
+  sharedWs.onmessage = (evt) => {
+    try {
+      const data = JSON.parse(evt.data);
+      listeners.forEach((fn) => fn(data));
+    } catch {
+      /* ignore */
+    }
+  };
+};
+
+const scheduleReconnect = () => {
+  if (retryTimer) return;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    sharedBackoff = Math.min(sharedBackoff * 1.7, 6000);
+    ensureSocket();
+  }, sharedBackoff);
+};
+
 export function useWebSocket() {
-  const [status, setStatus] = useState<WsStatus>("connecting");
+  const [status, setStatus] = useState<WsStatus>(statusState);
   const [lastMessage, setLastMessage] = useState<any>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    let alive = true;
-
-    const connect = () => {
-      try {
-        setStatus("connecting");
-        const ws = new WebSocket(`${WS_URL}?key=${API_KEY}`);
-        wsRef.current = ws;
-        ws.onopen = () => alive && setStatus("ok");
-        ws.onclose = () => {
-          alive && setStatus("closed");
-          retryRef.current = setTimeout(connect, 1500);
-        };
-        ws.onerror = () => {
-          alive && setStatus("closed");
-          retryRef.current = setTimeout(connect, 1500);
-        };
-        ws.onmessage = (evt) => {
-          try {
-            setLastMessage(JSON.parse(evt.data));
-          } catch {
-            /* ignore parse errors */
-          }
-        };
-      } catch {
-        retryRef.current = setTimeout(connect, 1500);
-      }
-    };
-
-    connect();
+    const msgHandler = (data: any) => setLastMessage(data);
+    const statusHandler = (s: WsStatus) => setStatus(s);
+    listeners.add(msgHandler);
+    statusListeners.add(statusHandler);
+    ensureSocket();
     return () => {
-      alive = false;
-      wsRef.current?.close();
-      if (retryRef.current) clearTimeout(retryRef.current);
+      listeners.delete(msgHandler);
+      statusListeners.delete(statusHandler);
     };
   }, []);
 
