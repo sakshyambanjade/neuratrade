@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
-import { createChart } from "lightweight-charts";
+import { createChart, CandlestickSeries } from "lightweight-charts";
 import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   getHealth,
@@ -101,7 +101,7 @@ export default function App() {
       grid: { vertLines: { color: "#1f2a4a" }, horzLines: { color: "#1f2a4a" } },
       timeScale: { timeVisible: true, secondsVisible: true },
     });
-    candleSeries.current = chartApi.current.addCandlestickSeries({
+    candleSeries.current = chartApi.current.addSeries(CandlestickSeries, {
       upColor: "#16c784",
       downColor: "#ef4444",
       borderUpColor: "#16c784",

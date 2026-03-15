@@ -8,7 +8,7 @@ router = APIRouter()
 
 
 @router.get("/indicators/latest")
-def latest_indicators():
+def indicators_latest():
     with SessionLocal() as db:
         rows = (
             db.query(models.Candle)
