@@ -68,6 +68,7 @@ body {
   border: 1px solid #1f2a4a;
   border-radius: 12px;
   padding: 18px 20px;
+  position: relative;
 }
 .panel-head {
   display: flex;
@@ -89,6 +90,19 @@ body {
   display: grid;
   grid-template-columns: 2fr 1fr;
   gap: 16px;
+}
+@media (max-width: 900px) {
+  .grid.two {
+    grid-template-columns: 1fr;
+  }
+}
+
+.loading {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-size: 12px;
+  color: #98a5c5;
 }
 .side {
   display: flex;

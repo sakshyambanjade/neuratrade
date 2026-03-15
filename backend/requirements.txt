@@ -7,3 +7,4 @@ python-dotenv==1.0.1
 websockets==12.0
 tenacity==8.2.3
 redis==5.0.1
+pytest==8.2.2
