@@ -15,7 +15,12 @@ API_PORT = int(os.getenv("API_PORT", 8000))
 WS_PATH = "/ws"
 
 # Data / DB
-DB_PATH = os.getenv("DB_PATH", "trading.db")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_env_db = os.getenv("DB_PATH", "")
+if _env_db:
+    DB_PATH = _env_db if os.path.isabs(_env_db) else os.path.join(BASE_DIR, _env_db)
+else:
+    DB_PATH = os.path.join(BASE_DIR, "trading.db")
 DB_URL = f"sqlite:///{DB_PATH}"
 SQLITE_BUSY_TIMEOUT_MS = int(os.getenv("SQLITE_BUSY_TIMEOUT_MS", 5000))
 

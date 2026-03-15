@@ -3,6 +3,7 @@ Lightweight event bus.
 - If REDIS_URL is set, publishes to Redis channel "events" for multi-process.
 - Otherwise falls back to in-process broadcast.
 """
+import asyncio
 import json
 import os
 import threading

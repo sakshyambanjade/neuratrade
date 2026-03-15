@@ -266,7 +266,7 @@ export default function App() {
                   <span className={t.action === "BUY" ? "pos" : "neg"}>{t.action}</span>
                   <span>${t.entry_price?.toFixed(2)}</span>
                   <span>{t.status ?? "open"}</span>
-                  <span className={(t.pnl_pct ?? 0) >= 0 ? "pos" : "neg"}>{t.pnl_pct?.toFixed?.(2) ?? "—"}</span>
+                  <span className={(t.pnl_pct ?? 0) >= 0 ? "pos" : "neg"}>{t.pnl_pct !== undefined ? (t.pnl_pct * 100).toFixed(2) : "—"}</span>
                 </div>
               ))}
             </div>

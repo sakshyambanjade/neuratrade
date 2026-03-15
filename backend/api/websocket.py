@@ -32,11 +32,12 @@ manager = ConnectionManager()
 
 
 def _fanout(event: dict):
-    import asyncio
-
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
+    try:
+        loop = asyncio.get_running_loop()
         loop.create_task(manager.broadcast(event))
+    except RuntimeError:
+        # No running loop (e.g., published from thread); skip broadcast
+        pass
 
 
 subscribe(_fanout)

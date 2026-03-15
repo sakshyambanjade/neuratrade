@@ -42,13 +42,44 @@ async def tick_loop():
         last_tick = ts
         with SessionLocal() as db:
             candles = market_service.get_candles(limit=200)
-            market_service.persist_candles(db, candles[-1:])
+            market_service.persist_candles(db, candles)
             indicators = indicator_service.latest_indicators(candles)
             price = indicators.get("price", 0)
             snap = portfolio_service.current_portfolio(db, price)
             open_trades = portfolio_service.open_trades_count(db)
             daily_trades = portfolio_service.daily_trade_count(db)
             dd = portfolio_service.current_drawdown(db, price)
+            # Check stop-loss/take-profit on existing position before new decision
+            ot = portfolio_service.open_trade(db)
+            if ot:
+                if price <= (ot.stop_loss or 0):
+                    closed = portfolio_service.close_position(db, price, "stop_loss")
+                    if closed:
+                        event_bus.publish(
+                            {
+                                "type": "trade_closed",
+                                "timestamp": ts,
+                                "id": closed.id,
+                                "exit_price": closed.exit_price,
+                                "pnl_usdt": closed.pnl_usdt,
+                                "pnl_pct": closed.pnl_pct,
+                            }
+                        )
+                        continue
+                if price >= (ot.take_profit or 0):
+                    closed = portfolio_service.close_position(db, price, "take_profit")
+                    if closed:
+                        event_bus.publish(
+                            {
+                                "type": "trade_closed",
+                                "timestamp": ts,
+                                "id": closed.id,
+                                "exit_price": closed.exit_price,
+                                "pnl_usdt": closed.pnl_usdt,
+                                "pnl_pct": closed.pnl_pct,
+                            }
+                        )
+                        continue
             ctx = risk_service.RiskContext(
                 equity=snap.total_value,
                 open_trades=open_trades,
@@ -61,10 +92,14 @@ async def tick_loop():
                 log.info("Risk blocked: %s", reason)
                 event_bus.publish({"type": "tick", "timestamp": ts, **indicators, "risk": reason})
                 continue
+            mems = memory_service.recall_similar(
+                f"btc rsi {indicators.get('rsi', 50):.0f} macd {indicators.get('macd', 0):.4f}", k=8
+            )
+            mem_texts = [m.get("content") or m.get("content_text") or "" for m in mems][:5]
             decision = decision_service.decide(
                 indicators,
                 {"total_value": snap.total_value, "cash": snap.cash, "btc": snap.btc_held},
-                memories=[],
+                memories=mem_texts,
             )
             memory_id = ""
             try:
