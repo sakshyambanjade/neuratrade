@@ -45,6 +45,14 @@ BRAIN_URL = os.getenv("BRAIN_URL", "http://127.0.0.1:8742")
 BRAIN_SECRET = os.getenv("BRAIN_SECRET", "dev-secret")
 USER_ID = os.getenv("USER_ID", "btc_trader")
 
+# Prajnyavan (optional SDK)
+PRAJ_BASE_URL = os.getenv("PRAJ_BASE_URL", "http://127.0.0.1:9999")
+PRAJ_TOKEN = os.getenv("PRAJ_TOKEN", "")
+PRAJ_EMBED_PROVIDER = os.getenv("PRAJ_EMBED_PROVIDER", "openai")  # openai | cohere | local
+PRAJ_EMBED_MODEL = os.getenv("PRAJ_EMBED_MODEL", "")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+COHERE_API_KEY = os.getenv("COHERE_API_KEY", "")
+
 # Auth
 API_KEY = os.getenv("API_KEY", "dev-key")  # replace in prod
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
