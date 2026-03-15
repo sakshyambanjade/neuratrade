@@ -74,6 +74,9 @@ body {
   justify-content: space-between;
   align-items: baseline;
 }
+.panel-head h2 {
+  margin: 0;
+}
 .panel h1 {
   margin: 0 0 8px;
   font-size: 22px;

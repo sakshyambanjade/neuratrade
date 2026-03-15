@@ -38,3 +38,11 @@ export type Indicators = {
   volume_ratio: number;
   ts?: number;
 };
+
+export type Snapshot = {
+  ts: number;
+  total_value: number;
+  cash: number;
+  btc: number;
+  daily_pnl: number;
+};

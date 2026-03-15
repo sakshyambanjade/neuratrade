@@ -8,7 +8,7 @@ from db.database import SessionLocal, init_db
 from db import models
 from services import market_service, indicator_service, decision_service, risk_service, portfolio_service, memory_service
 from utils import event_bus
-from config import TICK_INTERVAL_SECONDS
+from config import TICK_INTERVAL_SECONDS, HEARTBEAT_SECONDS
 from utils.logging import setup_logging
 
 log = setup_logging()
@@ -30,12 +30,16 @@ def record_decision(db, decision):
 
 async def tick_loop():
     init_db()
+    last_tick = time.time()
     while True:
         start = time.time()
         target = start - (start % TICK_INTERVAL_SECONDS) + TICK_INTERVAL_SECONDS
         sleep_for = max(0, target - time.time())
         await asyncio.sleep(sleep_for)
         ts = int(time.time())
+        if ts - last_tick > HEARTBEAT_SECONDS:
+            event_bus.publish({"type": "alert", "level": "warn", "message": "Tick delay exceeded", "delta_sec": ts - last_tick})
+        last_tick = ts
         with SessionLocal() as db:
             candles = market_service.get_candles(limit=200)
             market_service.persist_candles(db, candles[-1:])

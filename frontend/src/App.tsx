@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
 import { createChart } from "lightweight-charts";
+import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   getHealth,
   getStatus,
@@ -11,10 +12,11 @@ import {
   getDecisions,
   getBrainStatus,
   getBrainMemories,
+  getSnapshots,
 } from "./services/api";
 import { useWebSocket } from "./services/websocket";
 import "./style.css";
-import type { Candle, Trade, Decision, Indicators } from "./types/trading";
+import type { Candle, Trade, Decision, Indicators, Snapshot } from "./types/trading";
 
 type TickEvent = {
   type: "tick";
@@ -36,6 +38,7 @@ export default function App() {
   const [portfolio, setPortfolio] = useState<any>(null);
   const [brain, setBrain] = useState<any>(null);
   const [memories, setMemories] = useState<any[]>([]);
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const chartRef = useRef<HTMLDivElement | null>(null);
   const chartApi = useRef<any>(null);
   const candleSeries = useRef<any>(null);
@@ -53,6 +56,7 @@ export default function App() {
     getDecisions().then(setDecisions).catch(() => setDecisions([]));
     getBrainStatus().then(setBrain).catch(() => setBrain(null));
     getBrainMemories("", 5).then((d) => setMemories(d.items || [])).catch(() => setMemories([]));
+    getSnapshots().then(setSnapshots).catch(() => setSnapshots([]));
   }, []);
 
   // Live updates
@@ -201,9 +205,36 @@ export default function App() {
         </aside>
       </section>
 
+      <section className="panel">
+        <div className="panel-head">
+          <h2>Equity Curve</h2>
+          <div className="muted">Last {snapshots.length} points</div>
+        </div>
+        {snapshots.length === 0 ? (
+          <p className="muted">No snapshots yet.</p>
+        ) : (
+          <div style={{ width: "100%", height: 240 }}>
+            <ResponsiveContainer>
+              <AreaChart data={snapshots}>
+                <XAxis dataKey="ts" tickFormatter={(t) => format(t * 1000, "MM-dd")} />
+                <YAxis tickFormatter={(v) => `$${Math.round(v)}`} />
+                <Tooltip
+                  contentStyle={{ background: "#0f172e", border: "1px solid #1f2a4a" }}
+                  labelFormatter={(t) => format((t as number) * 1000, "MM-dd HH:mm")}
+                  formatter={(value: any) => [`$${Number(value).toFixed(2)}`, "Equity"]}
+                />
+                <Area type="monotone" dataKey="total_value" stroke="#16c784" fill="#0f3122" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </section>
+
       <section className="grid two">
         <div className="panel">
-          <h2>Recent Trades</h2>
+          <div className="panel-head">
+            <h2>Recent Trades</h2>
+          </div>
           {trades.length === 0 ? (
             <p className="muted">No trades yet.</p>
           ) : (
@@ -229,7 +260,9 @@ export default function App() {
         </div>
 
         <div className="panel">
-          <h2>Decisions</h2>
+          <div className="panel-head">
+            <h2>Decisions</h2>
+          </div>
           {decisions.slice(0, 10).map((d, i) => (
             <div className="card-line" key={i}>
               <div>
@@ -244,7 +277,10 @@ export default function App() {
       </section>
 
       <section className="panel">
-        <h2>Memories</h2>
+        <div className="panel-head">
+          <h2>Memories</h2>
+          <div className="muted">Top recalls</div>
+        </div>
         {memories.length === 0 ? (
           <p className="muted">None loaded.</p>
         ) : (

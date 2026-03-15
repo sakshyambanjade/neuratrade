@@ -36,11 +36,21 @@ def rsi(values: List[float], period: int = 14) -> float:
 def macd(values: List[float], fast: int = 12, slow: int = 26, signal: int = 9):
     if len(values) < slow + signal:
         return 0, 0
-    ema_fast = ema(values[-slow:], fast)
-    ema_slow = ema(values[-slow:], slow)
-    macd_line = ema_fast - ema_slow
-    # signal line approximate using repeated macd value over signal window
-    signal_line = ema([macd_line] * signal, signal)
+    # compute EMA series
+    ema_fast_series = []
+    ema_slow_series = []
+    prev_fast = values[0]
+    prev_slow = values[0]
+    k_fast = 2 / (fast + 1)
+    k_slow = 2 / (slow + 1)
+    for price in values:
+        prev_fast = price * k_fast + prev_fast * (1 - k_fast)
+        prev_slow = price * k_slow + prev_slow * (1 - k_slow)
+        ema_fast_series.append(prev_fast)
+        ema_slow_series.append(prev_slow)
+    macd_series = [f - s for f, s in zip(ema_fast_series, ema_slow_series)]
+    macd_line = macd_series[-1]
+    signal_line = ema(macd_series[-(signal + 5):], signal)
     return macd_line, signal_line
 
 

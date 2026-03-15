@@ -3,7 +3,7 @@ from fastapi import FastAPI, Depends, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from db.database import init_db
 from api.websocket import router as ws_router, manager
-from api.routes import health, status, candles, trades, portfolio, brain, decisions, indicators
+from api.routes import health, status, candles, trades, portfolio, brain, decisions, indicators, snapshots
 from config import ALLOWED_ORIGINS, API_KEY
 from utils.logging import setup_logging
 
@@ -41,6 +41,7 @@ app.include_router(candles.router, dependencies=[Depends(api_key_auth)], tags=["
 app.include_router(indicators.router, dependencies=[Depends(api_key_auth)], tags=["indicators"])
 app.include_router(trades.router, dependencies=[Depends(api_key_auth)], tags=["trades"])
 app.include_router(portfolio.router, dependencies=[Depends(api_key_auth)], tags=["portfolio"])
+app.include_router(snapshots.router, dependencies=[Depends(api_key_auth)], tags=["portfolio"])
 app.include_router(brain.router, dependencies=[Depends(api_key_auth)], tags=["brain"])
 app.include_router(decisions.router, dependencies=[Depends(api_key_auth)], tags=["decisions"])
 

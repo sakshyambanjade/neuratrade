@@ -52,3 +52,8 @@ export async function getBrainMemories(query = "", k = 5) {
   const { data } = await client.get("/brain/memories", { params: { query, k } });
   return data;
 }
+
+export async function getSnapshots(limit = 200) {
+  const { data } = await client.get("/portfolio/snapshots", { params: { limit } });
+  return data;
+}

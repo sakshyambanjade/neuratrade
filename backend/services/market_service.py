@@ -47,7 +47,7 @@ def _coingecko_ohlc(limit: int = 200) -> List[dict]:
                 "high": float(high),
                 "low": float(low),
                 "close": float(close),
-                "volume": None,
+                "volume": 0.0,
                 "source": "coingecko",
             }
         )

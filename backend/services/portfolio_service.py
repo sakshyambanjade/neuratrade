@@ -41,10 +41,10 @@ def current_drawdown(db, price: float) -> float:
         .order_by(models.PortfolioSnapshot.ts.asc())
         .all()
     )
-    peak = 0
-    dd = 0
+    peak = 0.0
+    dd = 0.0
     for s in snaps:
-        val = s.total_value if s.total_value else s.cash + s.btc_held * price
+        val = s.total_value if s.total_value else (s.cash or 0) + (s.btc_held or 0) * price
         if val > peak:
             peak = val
         if peak:
