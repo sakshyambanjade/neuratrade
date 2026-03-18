@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
-import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
+import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { createChart, CandlestickSeries, createSeriesMarkers } from "lightweight-charts";
 import type { IChartApi, ISeriesApi, ISeriesMarkersPluginApi, Time } from "lightweight-charts";
 import {
@@ -183,9 +183,22 @@ export default function App() {
     }
   }, [trades]);
 
+  const lastTrade = useMemo(() => trades.slice().sort((a, b) => (b.opened_at || 0) - (a.opened_at || 0))[0], [trades]);
+  const lastDecision = useMemo(() => decisions[0] ?? null, [decisions]);
+  const watchlist = useMemo(
+    () => [
+      {
+        symbol: "BTCUSD",
+        price: price || 0,
+        changePct: indicators?.ema9 && indicators?.ema21 ? (indicators.ema9 - indicators.ema21) / indicators.ema21 : null,
+      },
+    ],
+    [price, indicators],
+  );
+
   return (
     <div className="page">
-      <header className="hero">
+      <header className="hero hero-tight">
         <div>
           <div className="eyebrow">Backend</div>
           <span className={`badge ${health === "ok" ? "success" : "danger"}`}>{health}</span>
@@ -193,151 +206,214 @@ export default function App() {
         <div>
           <div className="eyebrow">WebSocket</div>
           <span className={wsBadge}>{wsStatus}</span>
+          {lastTick && <div className="muted">tick @ {format(lastTick.timestamp * 1000, "HH:mm:ss")}</div>}
         </div>
         <div>
           <div className="eyebrow">BTC Price</div>
           <div className="price">${price?.toFixed(2)}</div>
-          {lastTick && <div className="muted">tick @ {format(lastTick.timestamp * 1000, "HH:mm:ss")}</div>}
         </div>
         <div>
           <div className="eyebrow">Open Trades</div>
           <div className="price">{status?.open_trades ?? 0}</div>
+          <div className="muted">Total {status?.trade_count ?? 0}</div>
+        </div>
+        <div>
+          <div className="eyebrow">LLM Autonomy</div>
+          <span className={`pill tight ${brain?.prajnyavan ? "pill-on" : "pill-off"}`}>{brain?.prajnyavan ? "online" : "offline"}</span>
+          <div className="muted">Last decision: {lastDecision?.action ?? "--"}</div>
         </div>
       </header>
 
-      <section className="grid two">
-        <main className="panel">
-          <div className="panel-head">
-            <h1>Live BTC Candles</h1>
-            <div className="muted">Markers show buys/exits</div>
-          </div>
-          <div className="chart-wrap">
-            <div ref={chartRef} className="chart" />
-            {noCandles && <div className="chart-placeholder">No candles yet</div>}
-          </div>
-        </main>
+      <div className="shell">
+        <div className="column left">
+          <section className="panel">
+            <div className="panel-head">
+              <h2>Watchlist</h2>
+              <span className="muted">LLM scope</span>
+            </div>
+            <div className="watchlist">
+              {watchlist.map((item) => (
+                <div className="watch-row" key={item.symbol}>
+                  <div>
+                    <div className="watch-symbol">{item.symbol}</div>
+                    <div className="muted">Auto-managed</div>
+                  </div>
+                  <div className="watch-price">${item.price?.toFixed(2)}</div>
+                  <div className={item.changePct !== null ? (item.changePct >= 0 ? "pos" : "neg") : "muted"}>
+                    {item.changePct !== null ? `${(item.changePct * 100).toFixed(2)}%` : "?"}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="muted">Currently trading BTC; extend list as new symbols are enabled.</div>
+          </section>
 
-        <aside className="panel side">
-          <div className="stat">
-            <div className="label">Portfolio Value</div>
-            <div className="value">${portfolio?.total_value?.toFixed(2) ?? "—"}</div>
-            <div className="muted">
-              Cash ${portfolio?.cash?.toFixed(2) ?? "—"} · BTC {portfolio?.btc_held?.toFixed?.(4) ?? "—"}
+          <section className="panel">
+            <div className="panel-head">
+              <h2>Brain</h2>
+              <span className={`badge ${brain?.prajnyavan ? "success" : "danger"}`}>{brain?.prajnyavan ? "online" : "offline"}</span>
+            </div>
+            <div className="stat">
+              <div className="label">Memories</div>
+              <div className="value">{brain?.memories ?? "?"}</div>
+              <div className="muted">Top recalls feed the trade reasons.</div>
+            </div>
+            <div className="stat pills">
+              <div className="label">Indicators</div>
+              <div className="pill tight">RSI {indicators?.rsi?.toFixed(1) ?? "?"}</div>
+              <div className="pill tight">MACD {indicators?.macd?.toFixed(4) ?? "?"}</div>
+              <div className="pill tight">EMA9 {indicators?.ema9?.toFixed(2) ?? "?"}</div>
+              <div className="pill tight">EMA21 {indicators?.ema21?.toFixed(2) ?? "?"}</div>
+            </div>
+          </section>
+        </div>
+
+        <div className="column center">
+          <section className="panel chart-panel">
+            <div className="panel-head">
+              <div>
+                <h1>Live BTC Candles</h1>
+                <div className="muted">LLM markers show buys/exits</div>
+              </div>
+              <div className="toolbar">
+                <span className="pill tight">1h</span>
+                <span className="pill tight">4h</span>
+                <span className="pill tight">1d</span>
+              </div>
+            </div>
+            <div className="chart-wrap">
+              <div ref={chartRef} className="chart" />
+              {noCandles && <div className="chart-placeholder">No candles yet</div>}
+            </div>
+          </section>
+
+          <section className="panel blotter">
+            <div className="panel-head">
+              <h2>LLM Trade Blotter</h2>
+              <div className="muted">Executed by agent</div>
+            </div>
+            <div className="llm-callout">
+              <div className={`tag ${lastTrade?.action === "BUY" ? "buy" : "sell"}`}>{lastTrade?.action ?? "WAIT"}</div>
+              <div className="callout-body">
+                <div className="callout-title">
+                  {lastTrade ? `${lastTrade.action} @ $${lastTrade.entry_price?.toFixed?.(2) ?? "?"}` : "No LLM trades yet"}
+                </div>
+                <div className="muted">
+                  {lastTrade ? `Opened ${format((lastTrade.opened_at || 0) * 1000, "MM-dd HH:mm")}` : "Waiting for first signal"}
+                </div>
+                <div className="muted">Reason: {lastDecision?.reasoning ?? "?"}</div>
+              </div>
+            </div>
+
+            {trades.length === 0 ? (
+              <p className="muted">No trades yet.</p>
+            ) : (
+              <div className="table">
+                <div className="row head">
+                  <span>Time</span>
+                  <span>Action</span>
+                  <span>Entry</span>
+                  <span>Status</span>
+                  <span>PnL %</span>
+                </div>
+                {trades.map((t) => (
+                  <div className="row" key={t.id}>
+                    <span>{format((t.opened_at || 0) * 1000, "MM-dd HH:mm")}</span>
+                    <span className={t.action === "BUY" ? "pos" : "neg"}>{t.action}</span>
+                    <span>${t.entry_price?.toFixed(2)}</span>
+                    <span>{t.status ?? "open"}</span>
+                    <span className={(t.pnl_pct ?? 0) >= 0 ? "pos" : "neg"}>{t.pnl_pct !== undefined ? (t.pnl_pct * 100).toFixed(2) : "?"}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+
+        <div className="column right">
+          <section className="panel">
+            <div className="panel-head">
+              <h2>LLM Rationale</h2>
+              <div className="muted">Latest 10</div>
+            </div>
+            {decisions.slice(0, 10).map((d, i) => (
+              <div className="card-line" key={i}>
+                <div>
+                  <div className="eyebrow">{format(d.ts * 1000, "MM-dd HH:mm:ss")}</div>
+                  <div className="label">{d.action}</div>
+                </div>
+                <div className="muted">conf {d.confidence.toFixed(2)}</div>
+                <div className="reason">{d.reasoning}</div>
+              </div>
+            ))}
+          </section>
+
+          <section className="panel">
+            <div className="panel-head">
+              <h2>Portfolio & Position</h2>
+              <div className="muted">Live</div>
+            </div>
+            <div className="stat">
+              <div className="label">Portfolio Value</div>
+              <div className="value">${portfolio?.total_value?.toFixed(2) ?? "?"}</div>
+              <div className="muted">Cash ${portfolio?.cash?.toFixed(2) ?? "?"} ? BTC {portfolio?.btc_held?.toFixed?.(4) ?? "?"}</div>
             </div>
             {portfolio?.open_trade && (
-              <div className="muted">Open #{portfolio.open_trade.id} @ ${portfolio.open_trade.entry_price?.toFixed(0)}</div>
+              <div className="stat">
+                <div className="label">Open Trade</div>
+                <div className="muted">#{portfolio.open_trade.id} {portfolio.open_trade.action}</div>
+                <div className="value">Entry ${portfolio.open_trade.entry_price?.toFixed(0)}</div>
+                <div className="muted">Stop/Take: managed by LLM</div>
+              </div>
             )}
-          </div>
-          <div className="stat pills">
-            <div className="label">Indicators</div>
-            <div className="pill tight">RSI {indicators?.rsi?.toFixed(1) ?? "—"}</div>
-            <div className="pill tight">MACD {indicators?.macd?.toFixed(4) ?? "—"}</div>
-            <div className="pill tight">EMA9 {indicators?.ema9?.toFixed(2) ?? "—"}</div>
-            <div className="pill tight">EMA21 {indicators?.ema21?.toFixed(2) ?? "—"}</div>
-          </div>
-          <div className="stat">
-            <div className="label">Brain</div>
-            <div className="muted">Status: {brain?.prajnyavan ? "online" : "offline"}</div>
-            <div className="muted">Memories: {brain?.memories ?? "—"}</div>
-          </div>
-        </aside>
-      </section>
+          </section>
 
-      <section className="grid two">
-        <div className="panel">
-          <div className="panel-head">
-            <h2>Recent Trades</h2>
-            <div className="muted">{trades.length} rows</div>
-          </div>
-          {trades.length === 0 ? (
-            <p className="muted">No trades yet.</p>
-          ) : (
-            <div className="table">
-              <div className="row head">
-                <span>Time</span>
-                <span>Action</span>
-                <span>Entry</span>
-                <span>Status</span>
-                <span>PnL %</span>
+          <section className="panel">
+            <div className="panel-head">
+              <h2>Equity Curve</h2>
+              <div className="muted">Last {snapshots.length} pts</div>
+            </div>
+            {snapshots.length === 0 ? (
+              <p className="muted">No snapshots yet.</p>
+            ) : (
+              <div style={{ width: "100%", height: 200, minWidth: 240 }}>
+                <ResponsiveContainer>
+                  <AreaChart data={snapshots}>
+                    <XAxis dataKey="ts" tickFormatter={(t) => format(t * 1000, "MM-dd")} />
+                    <YAxis tickFormatter={(v) => `$${Math.round(v)}`} width={60} />
+                    <Tooltip
+                      contentStyle={{ background: "#0f172e", border: "1px solid #1f2a4a" }}
+                      labelFormatter={(t) => format((t as number) * 1000, "MM-dd HH:mm")}
+                      formatter={(value: any) => [`$${Number(value).toFixed(2)}`, "Equity"]}
+                    />
+                    <Area type="monotone" dataKey="total_value" stroke="#16c784" fill="#0f3122" strokeWidth={2} name="Equity" />
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
-              {trades.map((t) => (
-                <div className="row" key={t.id}>
-                  <span>{format((t.opened_at || 0) * 1000, "MM-dd HH:mm")}</span>
-                  <span className={t.action === "BUY" ? "pos" : "neg"}>{t.action}</span>
-                  <span>${t.entry_price?.toFixed(2)}</span>
-                  <span>{t.status ?? "open"}</span>
-                  <span className={(t.pnl_pct ?? 0) >= 0 ? "pos" : "neg"}>{t.pnl_pct !== undefined ? (t.pnl_pct * 100).toFixed(2) : "—"}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+            )}
+          </section>
 
-        <div className="panel">
-          <div className="panel-head">
-            <h2>Decisions</h2>
-            <div className="muted">Last {decisions.length}</div>
-          </div>
-          {decisions.slice(0, 10).map((d, i) => (
-            <div className="card-line" key={i}>
-              <div>
-                <div className="eyebrow">{format(d.ts * 1000, "MM-dd HH:mm:ss")}</div>
-                <div className="label">{d.action}</div>
+          <section className="panel">
+            <div className="panel-head">
+              <h2>Memories</h2>
+              <div className="muted">Top recalls</div>
+            </div>
+            {memories.length === 0 ? (
+              <p className="muted">None loaded.</p>
+            ) : (
+              <div className="mem-grid">
+                {memories.map((m, idx) => (
+                  <div className="mem-card" key={idx}>
+                    <div className="eyebrow">{m.category ?? "memory"}</div>
+                    <div className="reason">{m.content ?? ""}</div>
+                  </div>
+                ))}
               </div>
-              <div className="muted">conf {d.confidence.toFixed(2)}</div>
-              <div className="reason">{d.reasoning}</div>
-            </div>
-          ))}
+            )}
+          </section>
         </div>
-      </section>
-
-      <section className="grid two">
-        <div className="panel">
-          <div className="panel-head">
-            <h2>Equity Curve</h2>
-            <div className="muted">Last {snapshots.length} points</div>
-          </div>
-          {snapshots.length === 0 ? (
-            <p className="muted">No snapshots yet.</p>
-          ) : (
-            <div style={{ width: "100%", height: 240, minWidth: 320 }}>
-              <ResponsiveContainer>
-                <AreaChart data={snapshots}>
-                  <XAxis dataKey="ts" tickFormatter={(t) => format(t * 1000, "MM-dd")} />
-                  <YAxis tickFormatter={(v) => `$${Math.round(v)}`} />
-                  <Tooltip
-                    contentStyle={{ background: "#0f172e", border: "1px solid #1f2a4a" }}
-                    labelFormatter={(t) => format((t as number) * 1000, "MM-dd HH:mm")}
-                    formatter={(value: any) => [`$${Number(value).toFixed(2)}`, "Equity"]}
-                  />
-                  <Legend />
-                  <Area type="monotone" dataKey="total_value" stroke="#16c784" fill="#0f3122" strokeWidth={2} name="Equity" />
-                  <Area type="monotone" dataKey="cash" stroke="#38bdf8" fill="#0b1f33" strokeWidth={1} name="Cash" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </div>
-
-        <div className="panel">
-          <div className="panel-head">
-            <h2>Memories</h2>
-            <div className="muted">Top recalls</div>
-          </div>
-          {memories.length === 0 ? (
-            <p className="muted">None loaded.</p>
-          ) : (
-            <div className="mem-grid">
-              {memories.map((m, idx) => (
-                <div className="mem-card" key={idx}>
-                  <div className="eyebrow">{m.category ?? "memory"}</div>
-                  <div className="reason">{m.content ?? ""}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
+      </div>
     </div>
   );
+
 }
