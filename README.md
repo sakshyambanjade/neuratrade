@@ -1,3 +1,5 @@
+This repo is created for research paper
+
 This repo now has:
 - **backend/** FastAPI server + WebSocket hub + PM2-friendly trading loop with SQLite WAL, API key auth, risk gates, LLM fallback, optional Redis fanout.
 - **frontend/** React + Vite TypeScript dashboard (candles with markers, trades, decisions, brain snippets) via REST + live WebSocket ticks.
