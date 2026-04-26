@@ -1,4 +1,4 @@
-This repo is created for research paper
+Disclaimer : This repo is created for research paper
 
 This repo now has:
 - **backend/** FastAPI server + WebSocket hub + PM2-friendly trading loop with SQLite WAL, API key auth, risk gates, LLM fallback, optional Redis fanout.
