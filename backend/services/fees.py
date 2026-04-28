@@ -1,6 +1,7 @@
 """
 Fee models for simulated execution.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

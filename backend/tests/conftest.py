@@ -7,7 +7,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import pytest
-from db.database import init_db, SessionLocal
+
+from db.database import SessionLocal, init_db
 
 
 @pytest.fixture(scope="session", autouse=True)

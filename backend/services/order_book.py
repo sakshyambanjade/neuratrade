@@ -1,11 +1,12 @@
 """
 Order book primitives for paper execution simulation.
 """
+
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Literal
-
+from typing import Literal
 
 Side = Literal["BUY", "SELL"]
 OrderType = Literal["MARKET", "LIMIT"]
@@ -38,7 +39,7 @@ class OrderBookSnapshot:
         asks: Iterable[tuple[float, float]],
         symbol: str = "BTCUSDT",
         ts_ms: int | None = None,
-    ) -> "OrderBookSnapshot":
+    ) -> OrderBookSnapshot:
         bid_levels = tuple(
             sorted((OrderBookLevel(price, qty) for price, qty in bids), key=lambda level: level.price, reverse=True)
         )

@@ -1,24 +1,24 @@
 """
 Order-book based execution simulator.
 """
+
 from __future__ import annotations
 
 import json
 import math
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Callable, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from services.fees import calculate_fee
-from services.fees import FeeModel
+from services.fees import FeeModel, calculate_fee
 from services.latency import FixedLatencyModel, LatencyModel
 from services.order_book import OrderBookSnapshot, OrderType, Side
 from services.slippage import calculate_slippage_bps, estimate_slippage_bps
-
 
 OrderStatus = Literal["FILLED", "PARTIAL", "REJECTED"]
 MarketOrderStatus = Literal["FILLED", "REJECTED"]
@@ -272,9 +272,11 @@ class ExecutionSimulator:
     def _is_executable(self, order: SimulatedOrder, price: float) -> bool:
         if order.order_type == "MARKET":
             return True
+        if order.limit_price is None:
+            return False
         if order.side == "BUY":
-            return price <= float(order.limit_price)
-        return price >= float(order.limit_price)
+            return price <= order.limit_price
+        return price >= order.limit_price
 
     @staticmethod
     def _status(requested_quantity: float, filled_quantity: float) -> OrderStatus:

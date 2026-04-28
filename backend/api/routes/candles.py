@@ -1,6 +1,7 @@
 from fastapi import APIRouter
-from db.database import SessionLocal
+
 from db import models
+from db.database import SessionLocal
 from services import market_service
 
 router = APIRouter()
@@ -9,12 +10,7 @@ router = APIRouter()
 @router.get("/candles")
 def get_candles(limit: int = 200):
     with SessionLocal() as db:
-        rows = (
-            db.query(models.Candle)
-            .order_by(models.Candle.ts.desc())
-            .limit(limit)
-            .all()
-        )
+        rows = db.query(models.Candle).order_by(models.Candle.ts.desc()).limit(limit).all()
 
     # Seed database on empty installs using the live market feed
     if not rows:

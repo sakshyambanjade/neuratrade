@@ -1,16 +1,15 @@
 """
 Reusable Ollama client for strict JSON trading decisions.
 """
+
 from __future__ import annotations
 
 import json
 from typing import Any, Literal
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
-
 from config import LLM_MODEL, LLM_TIMEOUT, OLLAMA_URL
-
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 Action = Literal["BUY", "SELL", "HOLD"]
 

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
-from db.database import SessionLocal
+
 from db import models
+from db.database import SessionLocal
 
 router = APIRouter()
 
@@ -8,12 +9,7 @@ router = APIRouter()
 @router.get("/trades")
 def list_trades(limit: int = 100):
     with SessionLocal() as db:
-        rows = (
-            db.query(models.Trade)
-            .order_by(models.Trade.opened_at.desc())
-            .limit(limit)
-            .all()
-        )
+        rows = db.query(models.Trade).order_by(models.Trade.opened_at.desc()).limit(limit).all()
     return [
         {
             "id": r.id,

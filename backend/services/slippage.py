@@ -1,6 +1,7 @@
 """
 Slippage calculations in basis points.
 """
+
 from __future__ import annotations
 
 from services.order_book import Side

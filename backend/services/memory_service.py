@@ -1,20 +1,18 @@
 """
 Thin wrapper for Prajnyavan SDK (prajnyavan==0.1.1) with fail-open behavior.
 """
-import json
-from functools import lru_cache
-from typing import List
 
-from tenacity import retry, stop_after_attempt, wait_fixed
+import json
 
 from config import (
-    PRAJ_BASE_URL,
-    PRAJ_TOKEN,
-    PRAJ_EMBED_PROVIDER,
-    PRAJ_EMBED_MODEL,
     OPENAI_API_KEY,
+    PRAJ_BASE_URL,
+    PRAJ_EMBED_MODEL,
+    PRAJ_EMBED_PROVIDER,
+    PRAJ_TOKEN,
     USER_ID,
 )
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 
 def _client():
@@ -78,7 +76,7 @@ def update_outcome(memory_id: str, importance: float, suffix: str):
         return
 
 
-def recall_similar(query: str, k: int = 8) -> List[dict]:
+def recall_similar(query: str, k: int = 8) -> list[dict]:
     client = _client()
     if not client:
         return []

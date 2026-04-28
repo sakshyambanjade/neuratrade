@@ -1,6 +1,7 @@
 """
 Compare multiple local LLM models on the same price series.
 """
+
 from __future__ import annotations
 
 import csv
@@ -111,10 +112,7 @@ def compare_models(config: ModelComparisonConfig) -> ModelComparisonResult:
         )
 
     ranked = sorted(rows, key=lambda row: (-row.sharpe, row.max_drawdown, -row.cumulative_return))
-    ranked_rows = [
-        row.model_copy(update={"rank": index + 1})
-        for index, row in enumerate(ranked)
-    ]
+    ranked_rows = [row.model_copy(update={"rank": index + 1}) for index, row in enumerate(ranked)]
 
     csv_path = config.output_csv_path
     if csv_path:

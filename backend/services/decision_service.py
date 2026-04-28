@@ -1,9 +1,10 @@
 """
 LLM-backed decision service with validation + fallback to rules.
 """
-from pydantic import BaseModel, Field, field_validator
 
 from config import MIN_CONFIDENCE
+from pydantic import BaseModel, Field, field_validator
+
 from services.ollama_client import OllamaClient
 
 
@@ -60,5 +61,7 @@ def decide(indicators: dict, portfolio: dict, memories: list[str]) -> Decision:
         decision = _fallback_rule(indicators)
     # Enforce minimum confidence
     if decision.confidence < MIN_CONFIDENCE:
-        decision = Decision(action="HOLD", confidence=decision.confidence, reasoning="Confidence below minimum; holding")
+        decision = Decision(
+            action="HOLD", confidence=decision.confidence, reasoning="Confidence below minimum; holding"
+        )
     return decision

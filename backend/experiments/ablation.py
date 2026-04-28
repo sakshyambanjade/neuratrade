@@ -1,6 +1,7 @@
 """
 Ablation experiment runner for controlled benchmark variants.
 """
+
 from __future__ import annotations
 
 import csv
@@ -14,7 +15,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from services.execution import ExecutionSimulator, OrderRequest
 from services.metrics import cumulative_return, max_drawdown, profit_factor, sharpe_ratio, win_rate
 from services.risk_engine import RiskEngine, RiskInput
-
 
 VariantName = Literal["full_system", "no_risk_engine", "no_memory", "no_news", "no_slippage", "no_latency"]
 
@@ -246,19 +246,25 @@ def _normalize_decision(decision: Any) -> dict[str, Any]:
             "position_size_pct": 1.0 if action != "HOLD" else 0.0,
             "stop_loss": 0.02,
         }
-    data = dict(decision) if isinstance(decision, dict) else {
-        "action": getattr(decision, "action", "HOLD"),
-        "confidence": getattr(decision, "confidence", 1.0),
-        "position_size_pct": getattr(decision, "position_size_pct", 0.0),
-        "stop_loss": getattr(decision, "stop_loss", 0.02),
-    }
+    data = (
+        dict(decision)
+        if isinstance(decision, dict)
+        else {
+            "action": getattr(decision, "action", "HOLD"),
+            "confidence": getattr(decision, "confidence", 1.0),
+            "position_size_pct": getattr(decision, "position_size_pct", 0.0),
+            "stop_loss": getattr(decision, "stop_loss", 0.02),
+        }
+    )
     action = str(data.get("action", "HOLD")).upper()
     if action not in {"BUY", "SELL", "HOLD"}:
         action = "HOLD"
     return {
         "action": action,
         "confidence": min(max(_finite(data.get("confidence", 1.0)), 0.0), 1.0),
-        "position_size_pct": min(max(_finite(data.get("position_size_pct", 1.0 if action != "HOLD" else 0.0)), 0.0), 1.0),
+        "position_size_pct": min(
+            max(_finite(data.get("position_size_pct", 1.0 if action != "HOLD" else 0.0)), 0.0), 1.0
+        ),
         "stop_loss": _finite(data.get("stop_loss", 0.02)),
     }
 

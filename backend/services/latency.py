@@ -1,6 +1,7 @@
 """
 Latency models for execution simulation.
 """
+
 from __future__ import annotations
 
 import random

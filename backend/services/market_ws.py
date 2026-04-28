@@ -1,6 +1,7 @@
 """
 Binance WebSocket live market feed.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -11,7 +12,6 @@ from typing import Any
 
 import websockets
 from pydantic import BaseModel, ConfigDict, Field
-
 
 BINANCE_WS_BASE = "wss://stream.binance.com:9443/stream"
 DEFAULT_STREAMS = ("btcusdt@trade", "btcusdt@bookTicker", "btcusdt@kline_1m")

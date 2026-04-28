@@ -1,15 +1,15 @@
 """
 Central configuration. Load from environment with safe defaults for paper trading.
 """
+
 import os
 
 try:
-    from dotenv import load_dotenv
+    import dotenv
 except ImportError:
-    def load_dotenv():
-        return False
-
-load_dotenv()
+    pass
+else:
+    dotenv.load_dotenv()
 
 # Core
 APP_NAME = "prajnyavan-btc-bot"

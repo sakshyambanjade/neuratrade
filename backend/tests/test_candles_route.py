@@ -1,12 +1,10 @@
-import json
-
 import pytest
-from fastapi.testclient import TestClient
-
-from main import app
-from db.database import SessionLocal
-from db import models
 from config import API_KEY
+from fastapi.testclient import TestClient
+from main import app
+
+from db import models
+from db.database import SessionLocal
 from services import market_service
 
 

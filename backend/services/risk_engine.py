@@ -1,13 +1,13 @@
 """
 Production-grade risk engine for LLM trading decisions.
 """
+
 from __future__ import annotations
 
 import math
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-
 
 Action = Literal["BUY", "SELL", "HOLD"]
 
@@ -64,7 +64,7 @@ class RiskEngine:
     def validate(self, risk_input: RiskInput) -> RiskDecision:
         triggered: list[str] = []
         action = risk_input.action.upper()
-        final_action: Action = action if action in {"BUY", "SELL", "HOLD"} else "HOLD"
+        final_action: Action = cast(Action, action) if action in {"BUY", "SELL", "HOLD"} else "HOLD"
         final_size_pct = _finite_or_zero(risk_input.position_size_pct)
 
         if self.config.kill_switch_active:

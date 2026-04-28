@@ -129,7 +129,9 @@ def test_hold_does_not_execute_trade():
     repo = FakeRepo()
     runner = _runner(
         ollama_decision=_decision(action="HOLD", size=0.0),
-        risk_decision=RiskDecision(allowed=True, final_action="HOLD", final_size_pct=0.0, reason="hold", triggered_rules=[]),
+        risk_decision=RiskDecision(
+            allowed=True, final_action="HOLD", final_size_pct=0.0, reason="hold", triggered_rules=[]
+        ),
         repo=repo,
     )
 

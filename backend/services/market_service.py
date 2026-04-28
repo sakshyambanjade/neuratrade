@@ -1,14 +1,14 @@
 """
 Fetch candles from Binance with CoinGecko fallback. Keeps shapes consistent.
 """
-import time
-from typing import List
+
 import httpx
 from config import BINANCE_BASE, COINGECKO_BASE, SYMBOL
+
 from db import models
 
 
-def _binance_klines(limit: int = 200) -> List[dict]:
+def _binance_klines(limit: int = 200) -> list[dict]:
     url = f"{BINANCE_BASE}/api/v3/klines"
     params = {"symbol": SYMBOL, "interval": "5m", "limit": limit}
     with httpx.Client(timeout=10) as client:
@@ -31,9 +31,9 @@ def _binance_klines(limit: int = 200) -> List[dict]:
     return candles
 
 
-def _coingecko_ohlc(limit: int = 200) -> List[dict]:
+def _coingecko_ohlc(limit: int = 200) -> list[dict]:
     url = f"{COINGECKO_BASE}/coins/bitcoin/ohlc"
-    params = {"vs_currency": "usd", "days": 1}
+    params: dict[str, str | int] = {"vs_currency": "usd", "days": 1}
     with httpx.Client(timeout=10) as client:
         r = client.get(url, params=params)
         r.raise_for_status()
@@ -54,14 +54,14 @@ def _coingecko_ohlc(limit: int = 200) -> List[dict]:
     return candles
 
 
-def get_candles(limit: int = 200) -> List[dict]:
+def get_candles(limit: int = 200) -> list[dict]:
     try:
         return _binance_klines(limit)
     except Exception:
         return _coingecko_ohlc(limit)
 
 
-def persist_candles(db, candles: List[dict]):
+def persist_candles(db, candles: list[dict]):
     for c in candles:
         db.merge(
             models.Candle(

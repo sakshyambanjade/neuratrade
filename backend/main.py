@@ -1,10 +1,12 @@
 import time
-from fastapi import FastAPI, Depends, Header, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from db.database import init_db
-from api.websocket import router as ws_router, manager
-from api.routes import health, status, candles, trades, portfolio, brain, decisions, indicators, snapshots
+
 from config import ALLOWED_ORIGINS, API_KEY
+from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
+from api.routes import brain, candles, decisions, health, indicators, portfolio, snapshots, status, trades
+from api.websocket import router as ws_router
+from db.database import init_db
 from utils.logging import setup_logging
 
 log = setup_logging()

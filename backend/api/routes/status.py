@@ -1,8 +1,10 @@
 import time
+
 from fastapi import APIRouter
-from services.market_service import latest_price
-from db.database import SessionLocal
+
 from db import models
+from db.database import SessionLocal
+from services.market_service import latest_price
 
 router = APIRouter()
 

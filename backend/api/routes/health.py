@@ -1,6 +1,6 @@
 import httpx
+from config import BINANCE_BASE, BRAIN_URL, OLLAMA_URL
 from fastapi import APIRouter
-from config import OLLAMA_URL, BRAIN_URL, BINANCE_BASE
 
 router = APIRouter()
 

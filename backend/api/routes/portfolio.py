@@ -1,6 +1,7 @@
 from fastapi import APIRouter
-from db.database import SessionLocal
+
 from db import models
+from db.database import SessionLocal
 
 router = APIRouter()
 
@@ -8,16 +9,9 @@ router = APIRouter()
 @router.get("/portfolio")
 def get_portfolio():
     with SessionLocal() as db:
-        latest = (
-            db.query(models.PortfolioSnapshot)
-            .order_by(models.PortfolioSnapshot.ts.desc())
-            .first()
-        )
+        latest = db.query(models.PortfolioSnapshot).order_by(models.PortfolioSnapshot.ts.desc()).first()
         open_trade = (
-            db.query(models.Trade)
-            .filter(models.Trade.status == "open")
-            .order_by(models.Trade.opened_at.desc())
-            .first()
+            db.query(models.Trade).filter(models.Trade.status == "open").order_by(models.Trade.opened_at.desc()).first()
         )
     if not latest:
         return {"cash": 10000, "btc": 0, "total_value": 10000, "daily_pnl": 0}

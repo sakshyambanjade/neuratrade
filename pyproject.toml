@@ -1,0 +1,61 @@
+[tool.black]
+line-length = 120
+target-version = ["py312"]
+exclude = '''
+/(
+  \.git
+  | \.venv
+  | backend/\.venv
+  | frontend/node_modules
+  | dist
+)/
+'''
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+exclude = [
+  ".git",
+  ".venv",
+  "backend/.venv",
+  "frontend/node_modules",
+  "dist",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["B008", "E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["api", "db", "experiments", "reports", "services", "utils", "workers"]
+
+[tool.ruff.lint.per-file-ignores]
+"backend/tests/conftest.py" = ["E402"]
+"tests/conftest.py" = ["E402"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["backend"]
+ignore_missing_imports = true
+check_untyped_defs = false
+disallow_untyped_defs = false
+warn_return_any = false
+warn_unused_ignores = false
+no_implicit_optional = false
+exclude = [
+  "backend/tests/",
+]
+
+[[tool.mypy.overrides]]
+module = ["backend.db.models", "db.models"]
+ignore_errors = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "backend/tests"]
+pythonpath = ["backend"]
+addopts = "-q --cov=backend --cov-report=term-missing --cov-fail-under=80"
+
+[tool.coverage.run]
+omit = [
+  "backend/workers/trading_loop.py",
+]

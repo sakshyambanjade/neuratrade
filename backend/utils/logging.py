@@ -1,6 +1,7 @@
 import logging
 import sys
-from config import LOG_LEVEL, APP_NAME
+
+from config import APP_NAME, LOG_LEVEL
 
 
 def setup_logging():

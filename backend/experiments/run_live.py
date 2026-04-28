@@ -1,6 +1,7 @@
 """
 Live dry-run experiment runner.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -9,7 +10,8 @@ import json
 import math
 import signal
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -238,10 +240,11 @@ class LiveExperimentRunner:
         success: bool,
         error: str,
     ) -> None:
+        model_run_id = self._model_run_id()
         self._with_db(
             lambda db: self.repo.log_inference(
                 db,
-                model_run_id=int(self.state.model_run_id),
+                model_run_id=model_run_id,
                 model_name=self.config.model_name,
                 prompt_hash=hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
                 raw_response=json.dumps(decision_data, sort_keys=True),
@@ -254,10 +257,11 @@ class LiveExperimentRunner:
         )
 
     def _log_execution(self, report: Any, *, decision_price: float) -> None:
+        model_run_id = self._model_run_id()
         self._with_db(
             lambda db: self.repo.log_execution_fill(
                 db,
-                model_run_id=int(self.state.model_run_id),
+                model_run_id=model_run_id,
                 side=report.side,
                 requested_qty=_finite(report.requested_quantity),
                 filled_qty=_finite(report.filled_quantity),
@@ -271,20 +275,24 @@ class LiveExperimentRunner:
         )
 
     def _log_risk_event(self, risk_decision: Any, decision_data: dict[str, Any]) -> None:
+        model_run_id = self._model_run_id()
         rules = risk_decision.triggered_rules or ["risk_block"]
         for rule_name in rules:
-            self._with_db(
-                lambda db, rule_name=rule_name: self.repo.log_risk_event(
+
+            def log_event(db: Any, rule_name: str = rule_name) -> Any:
+                return self.repo.log_risk_event(
                     db,
-                    model_run_id=int(self.state.model_run_id),
+                    model_run_id=model_run_id,
                     rule_name=rule_name,
                     blocked=True,
                     reason=risk_decision.reason,
                     input_data=decision_data,
                 )
-            )
+
+            self._with_db(log_event)
 
     def _log_metrics(self, *, price: float) -> None:
+        model_run_id = self._model_run_id()
         equity = self._equity(price) if price > 0 else self.state.cash
         self.state.equity_series.append(_finite(equity))
         metric_values = {
@@ -298,7 +306,7 @@ class LiveExperimentRunner:
         self._with_db(
             lambda db: self.repo.log_metric_snapshot(
                 db,
-                model_run_id=int(self.state.model_run_id),
+                model_run_id=model_run_id,
                 **metric_values,
             )
         )
@@ -317,6 +325,11 @@ class LiveExperimentRunner:
     def _with_db(self, callback: Callable[[Any], Any]) -> Any:
         with self.session_factory() as db:
             return callback(db)
+
+    def _model_run_id(self) -> int:
+        if self.state.model_run_id is None:
+            raise RuntimeError("model run has not been initialized")
+        return self.state.model_run_id
 
     def _install_signal_handlers(self) -> None:
         try:

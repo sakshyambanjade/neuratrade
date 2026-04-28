@@ -1,11 +1,12 @@
 """
 Research metrics for equity curves and trade outcomes.
 """
+
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from statistics import mean, pstdev
-from typing import Iterable
 
 
 def _finite_series(values: Iterable[float]) -> list[float]:
@@ -29,7 +30,7 @@ def simple_returns(equity_series: Iterable[float]) -> list[float]:
         return []
 
     returns: list[float] = []
-    for previous, current in zip(values, values[1:]):
+    for previous, current in zip(values, values[1:], strict=False):
         if previous <= 0:
             returns.append(0.0)
             continue

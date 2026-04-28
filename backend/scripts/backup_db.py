@@ -2,10 +2,11 @@
 Simple SQLite backup with 7-day retention.
 Usage: python scripts/backup_db.py
 """
-import os
+
 import shutil
 import time
 from pathlib import Path
+
 from config import DB_PATH
 
 BACKUP_DIR = Path("backups")

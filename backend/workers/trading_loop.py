@@ -2,13 +2,23 @@
 5-minute aligned trading loop with risk gating and persistence.
 Run with: python -m workers.trading_loop
 """
+
 import asyncio
 import time
-from db.database import SessionLocal, init_db
+
+from config import HEARTBEAT_SECONDS, TICK_INTERVAL_SECONDS
+
 from db import models
-from services import market_service, indicator_service, decision_service, risk_service, portfolio_service, memory_service
+from db.database import SessionLocal, init_db
+from services import (
+    decision_service,
+    indicator_service,
+    market_service,
+    memory_service,
+    portfolio_service,
+    risk_service,
+)
 from utils import event_bus
-from config import TICK_INTERVAL_SECONDS, HEARTBEAT_SECONDS
 from utils.logging import setup_logging
 
 log = setup_logging()
@@ -38,7 +48,9 @@ async def tick_loop():
         await asyncio.sleep(sleep_for)
         ts = int(time.time())
         if ts - last_tick > HEARTBEAT_SECONDS:
-            event_bus.publish({"type": "alert", "level": "warn", "message": "Tick delay exceeded", "delta_sec": ts - last_tick})
+            event_bus.publish(
+                {"type": "alert", "level": "warn", "message": "Tick delay exceeded", "delta_sec": ts - last_tick}
+            )
         last_tick = ts
         with SessionLocal() as db:
             candles = market_service.get_candles(limit=200)
@@ -150,7 +162,13 @@ async def tick_loop():
         # Broadcast after DB commit
         event_bus.publish({"type": "tick", "timestamp": ts, **indicators})
         event_bus.publish(
-            {"type": "decision", "timestamp": ts, "action": decision.action, "confidence": decision.confidence, "reasoning": decision.reasoning}
+            {
+                "type": "decision",
+                "timestamp": ts,
+                "action": decision.action,
+                "confidence": decision.confidence,
+                "reasoning": decision.reasoning,
+            }
         )
         if trade_event:
             event_bus.publish(trade_event)

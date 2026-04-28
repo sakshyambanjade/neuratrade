@@ -1,6 +1,7 @@
 """
 Minimal experiment runner for synthetic benchmark passes.
 """
+
 from __future__ import annotations
 
 import math
@@ -17,7 +18,6 @@ from services.metrics import (
     win_rate,
 )
 from services.risk_service import RiskContext, validate
-
 
 Action = Literal["BUY", "SELL", "HOLD"]
 
@@ -78,7 +78,9 @@ def run_mock_experiment(config: ExperimentConfig) -> ExperimentResult:
     risk_blocked = 0
 
     for index, price in enumerate(config.prices):
-        decision = _normalize_decision(config.mocked_decisions[index] if index < len(config.mocked_decisions) else "HOLD")
+        decision = _normalize_decision(
+            config.mocked_decisions[index] if index < len(config.mocked_decisions) else "HOLD"
+        )
         action = decision["action"]
         confidence = decision["confidence"]
         position_size_pct = decision["position_size_pct"]
@@ -99,7 +101,9 @@ def run_mock_experiment(config: ExperimentConfig) -> ExperimentResult:
             else:
                 spendable_cash = cash * position_size_pct
                 quantity = spendable_cash / price if price > 0 else 0.0
-                report = simulator.execute_market_order(_order_request(config, "BUY", quantity, price, cash, btc, avg_entry_price))
+                report = simulator.execute_market_order(
+                    _order_request(config, "BUY", quantity, price, cash, btc, avg_entry_price)
+                )
                 if report.status == "FILLED":
                     latencies.append(report.latency_ms)
                     previous_btc = btc
@@ -118,7 +122,9 @@ def run_mock_experiment(config: ExperimentConfig) -> ExperimentResult:
         elif action == "SELL" and btc > 0:
             quantity = btc * position_size_pct if position_size_pct > 0 else btc
             quantity = min(quantity, btc)
-            report = simulator.execute_market_order(_order_request(config, "SELL", quantity, price, cash, btc, avg_entry_price))
+            report = simulator.execute_market_order(
+                _order_request(config, "SELL", quantity, price, cash, btc, avg_entry_price)
+            )
             if report.status == "FILLED":
                 latencies.append(report.latency_ms)
                 cash = report.cash_after
@@ -151,7 +157,7 @@ def run_mock_experiment(config: ExperimentConfig) -> ExperimentResult:
     )
 
 
-def _normalize_decision(decision: Any) -> dict[str, float | Action]:
+def _normalize_decision(decision: Any) -> dict[str, Any]:
     if isinstance(decision, str):
         action = decision.upper()
         confidence = 1.0

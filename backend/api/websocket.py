@@ -1,7 +1,8 @@
 import asyncio
-from typing import Set
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Header
+
 from config import API_KEY, WS_PATH
+from fastapi import APIRouter, Header, WebSocket, WebSocketDisconnect
+
 from utils.event_bus import subscribe
 
 router = APIRouter()
@@ -9,7 +10,7 @@ router = APIRouter()
 
 class ConnectionManager:
     def __init__(self):
-        self.active: Set[WebSocket] = set()
+        self.active: set[WebSocket] = set()
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()

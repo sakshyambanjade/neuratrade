@@ -3,19 +3,19 @@ Lightweight event bus.
 - If REDIS_URL is set, publishes to Redis channel "events" for multi-process.
 - Otherwise falls back to in-process broadcast.
 """
-import asyncio
+
 import json
 import os
 import threading
-from typing import Callable, Optional
+from collections.abc import Callable
 
 import redis
 
 REDIS_URL = os.getenv("REDIS_URL", "")
 CHANNEL = "events"
 
-_redis_client: Optional[redis.Redis] = None
-_sub_thread: Optional[threading.Thread] = None
+_redis_client: redis.Redis | None = None
+_sub_thread: threading.Thread | None = None
 _listeners: list[Callable[[dict], None]] = []
 
 

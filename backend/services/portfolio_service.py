@@ -1,12 +1,11 @@
 import json
 import time
 import uuid
-from typing import Optional
 
+from config import MAX_POSITION_PCT
 from sqlalchemy import func
 
 from db import models
-from config import MAX_POSITION_PCT
 
 INITIAL_CASH = 10000.0
 
@@ -52,24 +51,14 @@ def open_trades_count(db) -> int:
 
 def daily_trade_count(db) -> int:
     today_start = int(time.time()) - 86400
-    return (
-        db.query(func.count(models.Trade.id))
-        .filter(models.Trade.opened_at >= today_start)
-        .scalar()
-        or 0
-    )
+    return db.query(func.count(models.Trade.id)).filter(models.Trade.opened_at >= today_start).scalar() or 0
 
 
-def open_trade(db) -> Optional[models.Trade]:
-    return (
-        db.query(models.Trade)
-        .filter(models.Trade.status == "open")
-        .order_by(models.Trade.opened_at.desc())
-        .first()
-    )
+def open_trade(db) -> models.Trade | None:
+    return db.query(models.Trade).filter(models.Trade.status == "open").order_by(models.Trade.opened_at.desc()).first()
 
 
-def open_position(db, price: float, decision, indicators: dict, brain_id: str = "") -> Optional[models.Trade]:
+def open_position(db, price: float, decision, indicators: dict, brain_id: str = "") -> models.Trade | None:
     snap = current_portfolio(db, price)
     size_usdt = min(snap.total_value * MAX_POSITION_PCT, snap.cash)
     if size_usdt <= 0:

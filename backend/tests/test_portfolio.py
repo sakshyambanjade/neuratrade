@@ -1,6 +1,6 @@
-from services import portfolio_service as ps
-from db.database import init_db, SessionLocal
 from db import models
+from db.database import SessionLocal, init_db
+from services import portfolio_service as ps
 
 
 def setup_function(_):
@@ -13,7 +13,7 @@ def setup_function(_):
 
 def test_open_and_close_trade():
     with SessionLocal() as db:
-        snap = ps.current_portfolio(db, price=50000)
+        ps.current_portfolio(db, price=50000)
         decision = type("D", (), {"confidence": 1.0, "reasoning": "test"})()
         trade = ps.open_position(db, price=50000, decision=decision, indicators={}, brain_id="")
         assert trade is not None

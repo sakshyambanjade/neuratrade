@@ -1,7 +1,8 @@
+from config import DB_URL, SQLITE_BUSY_TIMEOUT_MS
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
+
 from .models import Base
-from config import DB_URL, SQLITE_BUSY_TIMEOUT_MS
 
 engine = create_engine(
     DB_URL,

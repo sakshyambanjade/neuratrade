@@ -1,12 +1,14 @@
 """
 Risk gating for every trade decision.
 """
+
 from dataclasses import dataclass
+
 from config import (
-    MAX_POSITION_PCT,
-    MAX_OPEN_TRADES,
     MAX_DAILY_TRADES,
     MAX_DRAWDOWN_PCT,
+    MAX_OPEN_TRADES,
+    MAX_POSITION_PCT,
     MIN_CONFIDENCE,
 )
 

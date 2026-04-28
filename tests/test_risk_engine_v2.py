@@ -29,9 +29,7 @@ def test_low_confidence_blocked():
 
 
 def test_oversized_position_capped():
-    decision = RiskEngine(RiskConfig(max_position_pct=0.25)).validate(
-        _input(position_size_pct=0.9, stop_loss=99)
-    )
+    decision = RiskEngine(RiskConfig(max_position_pct=0.25)).validate(_input(position_size_pct=0.9, stop_loss=99))
 
     assert decision.allowed is True
     assert decision.final_size_pct == 0.25
