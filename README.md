@@ -167,6 +167,43 @@ PY
 
 The generated Markdown report includes configuration, model leaderboard, ablation table, key metrics, chart links, limitations, and reproducibility notes.
 
+## Paper Demo Artifacts
+
+Run the paper-demo pipeline to create a mocked, network-free evidence bundle:
+
+```bash
+scripts/paper_demo.sh
+```
+
+Or:
+
+```bash
+make paper-demo
+```
+
+It writes outputs to `artifacts/demo/`:
+
+```text
+artifacts/demo/
+  experiment_config.json
+  model_comparison.csv
+  ablation_results.csv
+  ablation_summary.json
+  model_sharpe.png
+  ablation_sharpe.png
+  report.md
+```
+
+Example leaderboard shape:
+
+| Model | Return | Sharpe | MDD | Win Rate | Latency |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| qwen2.5:7b | 0.006 | 2.31 | 0.012 | 0.50 | 25 ms |
+| llama3.1:8b | 0.002 | 0.84 | 0.018 | 0.33 | 25 ms |
+| gemma2:2b | 0.000 | 0.00 | 0.000 | 0.00 | 25 ms |
+
+The demo uses mocked decisions so CI and reviewers can reproduce the artifact pipeline without Ollama, Binance, wallets, or exchange credentials.
+
 ## Research Motivation
 
 NeuraTradeBench is designed to study whether small local LLMs can produce consistent, measurable trading decisions when wrapped in deterministic research infrastructure. The goal is not to prove profitability. The goal is to make model behavior observable under repeatable BTC market conditions, quantify the effect of safety layers, and compare decision quality across local models and system variants.

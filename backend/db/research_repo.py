@@ -47,6 +47,11 @@ def create_model_run(
     model_name: str,
     status: str = "running",
     seed: int | None = None,
+    prompt_version: str = "v1",
+    system_prompt_hash: str = "",
+    temperature: float = 0.0,
+    ollama_model_tag: str = "",
+    hardware_tag: str = "",
 ) -> models.ModelRun:
     model_run = models.ModelRun(
         experiment_id=experiment_id,
@@ -55,6 +60,11 @@ def create_model_run(
         started_at=_now(),
         ended_at=None,
         seed=seed,
+        prompt_version=prompt_version,
+        system_prompt_hash=system_prompt_hash,
+        temperature=temperature,
+        ollama_model_tag=ollama_model_tag or model_name,
+        hardware_tag=hardware_tag,
     )
     db.add(model_run)
     db.commit()
@@ -74,12 +84,22 @@ def log_inference(
     latency_ms: int,
     success: bool,
     error: str = "",
+    prompt_version: str = "v1",
+    system_prompt_hash: str = "",
+    temperature: float = 0.0,
+    ollama_model_tag: str = "",
+    hardware_tag: str = "",
 ) -> models.InferenceLog:
     row = models.InferenceLog(
         model_run_id=model_run_id,
         timestamp=_now(),
         model_name=model_name,
         prompt_hash=prompt_hash,
+        prompt_version=prompt_version,
+        system_prompt_hash=system_prompt_hash,
+        temperature=temperature,
+        ollama_model_tag=ollama_model_tag or model_name,
+        hardware_tag=hardware_tag,
         raw_response=raw_response,
         parsed_action=parsed_action,
         confidence=confidence,

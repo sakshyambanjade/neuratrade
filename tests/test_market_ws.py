@@ -25,6 +25,27 @@ def test_book_ticker_updates_bid_ask_and_spread_bps():
     assert snapshot.spread_bps == (1.0 / 100.5) * 10_000
 
 
+def test_depth20_updates_top_order_book_levels():
+    feed = BinanceMarketWebSocket()
+
+    feed.process_message(
+        {
+            "data": {
+                "e": "depthUpdate",
+                "b": [["100.0", "0.5"], ["101.0", "0.25"], ["99.0", "0.1"]],
+                "a": [["102.0", "0.4"], ["103.0", "0.2"], ["101.5", "0.3"]],
+            }
+        }
+    )
+
+    snapshot = feed.get_snapshot()
+    assert snapshot.bid == 101.0
+    assert snapshot.ask == 101.5
+    assert [level.price for level in snapshot.bids] == [101.0, 100.0, 99.0]
+    assert [level.price for level in snapshot.asks] == [101.5, 102.0, 103.0]
+    assert snapshot.spread_bps == (0.5 / 101.25) * 10_000
+
+
 def test_kline_closed_candle_updates_history():
     feed = BinanceMarketWebSocket()
 

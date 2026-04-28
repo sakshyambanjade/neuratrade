@@ -13,7 +13,19 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from services.execution import ExecutionSimulator, OrderRequest
-from services.metrics import cumulative_return, max_drawdown, profit_factor, sharpe_ratio, win_rate
+from services.metrics import (
+    average_latency,
+    average_slippage,
+    calmar_ratio,
+    conditional_value_at_risk_95,
+    cumulative_return,
+    max_drawdown,
+    profit_factor,
+    sharpe_ratio,
+    sortino_ratio,
+    value_at_risk_95,
+    win_rate,
+)
 from services.risk_engine import RiskEngine, RiskInput
 
 VariantName = Literal["full_system", "no_risk_engine", "no_memory", "no_news", "no_slippage", "no_latency"]
@@ -71,6 +83,10 @@ class AblationRunMetrics(BaseModel):
     price_series: list[float]
     cumulative_return: float
     sharpe: float
+    sortino: float
+    calmar: float
+    value_at_risk_95: float
+    conditional_value_at_risk_95: float
     max_drawdown: float
     win_rate: float
     profit_factor: float
@@ -216,11 +232,15 @@ def _run_variant(config: AblationConfig, variant: AblationVariant) -> AblationRu
         price_series=list(config.prices),
         cumulative_return=_finite(cumulative_return(equity_series)),
         sharpe=_finite(sharpe_ratio(equity_series)),
+        sortino=_finite(sortino_ratio(equity_series)),
+        calmar=_finite(calmar_ratio(equity_series)),
+        value_at_risk_95=_finite(value_at_risk_95(equity_series)),
+        conditional_value_at_risk_95=_finite(conditional_value_at_risk_95(equity_series)),
         max_drawdown=_finite(max_drawdown(equity_series)),
         win_rate=_finite(win_rate(trade_pnls)),
         profit_factor=_finite(profit_factor(trade_pnls)),
-        avg_slippage_bps=_finite(sum(slippages) / len(slippages)) if slippages else 0.0,
-        avg_latency_ms=_finite(sum(latencies) / len(latencies)) if latencies else 0.0,
+        avg_slippage_bps=_finite(average_slippage(slippages)),
+        avg_latency_ms=_finite(average_latency(latencies)),
         trade_count=trade_count,
         risk_blocked=risk_blocked,
     )
@@ -300,6 +320,10 @@ def _write_csv(path: Path, rows: list[AblationRunMetrics]) -> None:
                 "variant",
                 "cumulative_return",
                 "sharpe",
+                "sortino",
+                "calmar",
+                "value_at_risk_95",
+                "conditional_value_at_risk_95",
                 "max_drawdown",
                 "win_rate",
                 "profit_factor",

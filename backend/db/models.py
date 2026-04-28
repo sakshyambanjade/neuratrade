@@ -92,6 +92,11 @@ class ModelRun(Base):
     started_at = Column(Integer, nullable=False)
     ended_at = Column(Integer, nullable=True)
     seed = Column(Integer, nullable=True)
+    prompt_version = Column(String, nullable=False, default="v1")
+    system_prompt_hash = Column(String, nullable=False, default="")
+    temperature = Column(Float, nullable=False, default=0.0)
+    ollama_model_tag = Column(String, nullable=False, default="")
+    hardware_tag = Column(String, nullable=False, default="")
 
     experiment = relationship("Experiment", back_populates="model_runs")
     inference_logs = relationship(
@@ -124,6 +129,11 @@ class InferenceLog(Base):
     timestamp = Column(Integer, nullable=False)
     model_name = Column(String, nullable=False)
     prompt_hash = Column(String, nullable=False)
+    prompt_version = Column(String, nullable=False, default="v1")
+    system_prompt_hash = Column(String, nullable=False, default="")
+    temperature = Column(Float, nullable=False, default=0.0)
+    ollama_model_tag = Column(String, nullable=False, default="")
+    hardware_tag = Column(String, nullable=False, default="")
     raw_response = Column(Text, nullable=False)
     parsed_action = Column(String, nullable=False)
     confidence = Column(Float, nullable=False)

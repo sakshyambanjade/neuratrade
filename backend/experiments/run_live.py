@@ -36,6 +36,12 @@ class LiveRunConfig(BaseModel):
     dry_run: bool = True
     experiment_name: str = "live-dry-run"
     description: str = ""
+    seed: int | None = None
+    prompt_version: str = "v1"
+    system_prompt_hash: str = ""
+    temperature: float = Field(default=0.0, ge=0.0)
+    ollama_model_tag: str = ""
+    hardware_tag: str = ""
     fee_bps: float = Field(default=10.0, ge=0)
     minute_volume_default: float = Field(default=100.0, ge=0)
     volatility_default: float = Field(default=0.0, ge=0)
@@ -226,6 +232,12 @@ class LiveExperimentRunner:
                 db,
                 experiment_id=experiment.id,
                 model_name=self.config.model_name,
+                seed=self.config.seed,
+                prompt_version=self.config.prompt_version,
+                system_prompt_hash=self.config.system_prompt_hash,
+                temperature=self.config.temperature,
+                ollama_model_tag=self.config.ollama_model_tag or self.config.model_name,
+                hardware_tag=self.config.hardware_tag,
             )
             self.state.experiment_id = experiment.id
             self.state.model_run_id = model_run.id
@@ -253,6 +265,11 @@ class LiveExperimentRunner:
                 latency_ms=latency_ms,
                 success=success,
                 error=error,
+                prompt_version=self.config.prompt_version,
+                system_prompt_hash=self.config.system_prompt_hash,
+                temperature=self.config.temperature,
+                ollama_model_tag=self.config.ollama_model_tag or self.config.model_name,
+                hardware_tag=self.config.hardware_tag,
             )
         )
 

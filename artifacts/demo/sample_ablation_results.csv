@@ -1,0 +1,5 @@
+variant,cumulative_return,sharpe,sortino,calmar,value_at_risk_95,conditional_value_at_risk_95,max_drawdown,win_rate,profit_factor,avg_slippage_bps,avg_latency_ms,trade_count,risk_blocked
+full_system,0.006,2.31,3.14,1.92,0.004,0.006,0.012,0.50,1.40,5.0,25,4,0
+no_risk_engine,0.009,1.12,1.45,0.60,0.009,0.012,0.030,0.50,1.20,5.0,25,5,0
+no_slippage,0.008,2.80,3.60,2.20,0.003,0.004,0.010,0.50,1.65,0.0,25,4,0
+no_latency,0.006,2.31,3.14,1.92,0.004,0.006,0.012,0.50,1.40,5.0,0,4,0

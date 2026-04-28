@@ -28,3 +28,29 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, futu
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    _ensure_research_metadata_columns()
+
+
+def _ensure_research_metadata_columns():
+    columns_by_table = {
+        "model_runs": {
+            "prompt_version": "VARCHAR DEFAULT 'v1' NOT NULL",
+            "system_prompt_hash": "VARCHAR DEFAULT '' NOT NULL",
+            "temperature": "FLOAT DEFAULT 0.0 NOT NULL",
+            "ollama_model_tag": "VARCHAR DEFAULT '' NOT NULL",
+            "hardware_tag": "VARCHAR DEFAULT '' NOT NULL",
+        },
+        "inference_logs": {
+            "prompt_version": "VARCHAR DEFAULT 'v1' NOT NULL",
+            "system_prompt_hash": "VARCHAR DEFAULT '' NOT NULL",
+            "temperature": "FLOAT DEFAULT 0.0 NOT NULL",
+            "ollama_model_tag": "VARCHAR DEFAULT '' NOT NULL",
+            "hardware_tag": "VARCHAR DEFAULT '' NOT NULL",
+        },
+    }
+    with engine.begin() as connection:
+        for table, columns in columns_by_table.items():
+            existing = {row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info({table})")}
+            for column, definition in columns.items():
+                if column not in existing:
+                    connection.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")

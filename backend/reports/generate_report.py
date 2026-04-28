@@ -33,7 +33,18 @@ def generate_markdown_report(experiment_id: int, output_md: str | Path) -> None:
         (
             _table_from_csv(
                 comparison_csv,
-                preferred=["rank", "model", "return", "sharpe", "max_drawdown", "win_rate", "profit_factor"],
+                preferred=[
+                    "rank",
+                    "model",
+                    "return",
+                    "sharpe",
+                    "sortino",
+                    "calmar",
+                    "max_drawdown",
+                    "win_rate",
+                    "profit_factor",
+                    "avg_latency_ms",
+                ],
             )
             if comparison_csv
             else "No model comparison CSV was found."
@@ -47,6 +58,8 @@ def generate_markdown_report(experiment_id: int, output_md: str | Path) -> None:
                     "variant",
                     "cumulative_return",
                     "sharpe",
+                    "sortino",
+                    "calmar",
                     "max_drawdown",
                     "win_rate",
                     "profit_factor",

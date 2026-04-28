@@ -27,6 +27,11 @@ def test_research_logging_end_to_end_relationship_counts():
             experiment_id=experiment.id,
             model_name="alpha",
             seed=7,
+            prompt_version="ntb-v1",
+            system_prompt_hash="system123",
+            temperature=0.0,
+            ollama_model_tag="alpha:latest",
+            hardware_tag="ci",
         )
 
         inference = research_repo.log_inference(
@@ -39,6 +44,11 @@ def test_research_logging_end_to_end_relationship_counts():
             confidence=0.9,
             latency_ms=12,
             success=True,
+            prompt_version="ntb-v1",
+            system_prompt_hash="system123",
+            temperature=0.0,
+            ollama_model_tag="alpha:latest",
+            hardware_tag="ci",
         )
         fill = research_repo.log_execution_fill(
             db,
@@ -88,6 +98,10 @@ def test_research_logging_end_to_end_relationship_counts():
         assert finished.ended_at is not None
 
         assert inference.id is not None
+        assert inference.prompt_version == "ntb-v1"
+        assert inference.system_prompt_hash == "system123"
+        assert inference.ollama_model_tag == "alpha:latest"
+        assert inference.hardware_tag == "ci"
         assert fill.id is not None
         assert metric.id is not None
         assert risk.id is not None
@@ -109,3 +123,8 @@ def test_required_research_fields_are_populated():
         assert model_run.model_name
         assert model_run.status
         assert model_run.started_at is not None
+        assert model_run.prompt_version == "v1"
+        assert model_run.system_prompt_hash == ""
+        assert model_run.temperature == 0.0
+        assert model_run.ollama_model_tag == "alpha"
+        assert model_run.hardware_tag == ""

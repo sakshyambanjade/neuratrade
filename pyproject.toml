@@ -6,6 +6,7 @@ exclude = '''
   \.git
   | \.venv
   | backend/\.venv
+  | backend/\.venv311
   | frontend/node_modules
   | dist
 )/
@@ -18,6 +19,7 @@ exclude = [
   ".git",
   ".venv",
   "backend/.venv",
+  "backend/.venv311",
   "frontend/node_modules",
   "dist",
 ]
@@ -54,6 +56,9 @@ ignore_errors = true
 testpaths = ["tests", "backend/tests"]
 pythonpath = ["backend"]
 addopts = "-q --cov=backend --cov-report=term-missing --cov-fail-under=80"
+markers = [
+  "integration: tests that require live services, network access, or intentionally slow end-to-end flows",
+]
 
 [tool.coverage.run]
 omit = [

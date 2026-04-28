@@ -56,6 +56,10 @@ class ModelRunMetrics(BaseModel):
     price_series: list[float]
     cumulative_return: float
     sharpe: float
+    sortino: float
+    calmar: float
+    value_at_risk_95: float
+    conditional_value_at_risk_95: float
     max_drawdown: float
     win_rate: float
     profit_factor: float
@@ -101,6 +105,10 @@ def compare_models(config: ModelComparisonConfig) -> ModelComparisonResult:
                 price_series=list(config.prices),
                 cumulative_return=_finite(experiment.cumulative_return),
                 sharpe=_finite(experiment.sharpe),
+                sortino=_finite(experiment.sortino),
+                calmar=_finite(experiment.calmar),
+                value_at_risk_95=_finite(experiment.value_at_risk_95),
+                conditional_value_at_risk_95=_finite(experiment.conditional_value_at_risk_95),
                 max_drawdown=_finite(experiment.max_drawdown),
                 win_rate=_finite(experiment.win_rate),
                 profit_factor=_finite(experiment.profit_factor),
@@ -147,6 +155,10 @@ def _write_csv(path: Path, rows: list[ModelRunMetrics]) -> None:
                 "model",
                 "return",
                 "sharpe",
+                "sortino",
+                "calmar",
+                "value_at_risk_95",
+                "conditional_value_at_risk_95",
                 "max_drawdown",
                 "win_rate",
                 "profit_factor",
@@ -164,6 +176,10 @@ def _write_csv(path: Path, rows: list[ModelRunMetrics]) -> None:
                     "model": row.model,
                     "return": row.cumulative_return,
                     "sharpe": row.sharpe,
+                    "sortino": row.sortino,
+                    "calmar": row.calmar,
+                    "value_at_risk_95": row.value_at_risk_95,
+                    "conditional_value_at_risk_95": row.conditional_value_at_risk_95,
                     "max_drawdown": row.max_drawdown,
                     "win_rate": row.win_rate,
                     "profit_factor": row.profit_factor,

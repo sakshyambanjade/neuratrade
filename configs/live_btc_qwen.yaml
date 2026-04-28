@@ -1,0 +1,17 @@
+experiment_name: live-btc-qwen-dry-run
+description: Live BTCUSDT dry-run evaluation with a local Qwen model.
+model_name: qwen2.5:7b
+symbol: BTCUSDT
+dry_run: true
+seed: 42
+prompt_version: ntb-v1
+temperature: 0.0
+ollama_model_tag: qwen2.5:7b
+hardware_tag: local-workstation
+starting_balance: 10000.0
+starting_btc: 0.0
+cycle_interval_seconds: 60
+max_cycles: 120
+fee_bps: 10.0
+minute_volume_default: 100.0
+volatility_default: 0.01

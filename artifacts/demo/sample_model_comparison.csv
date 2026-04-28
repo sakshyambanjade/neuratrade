@@ -1,0 +1,4 @@
+rank,model,return,sharpe,sortino,calmar,value_at_risk_95,conditional_value_at_risk_95,max_drawdown,win_rate,profit_factor,avg_latency_ms,fills,rejected,risk_blocked
+1,qwen2.5:7b,0.006,2.31,3.14,1.92,0.004,0.006,0.012,0.50,1.40,25,4,0,0
+2,llama3.1:8b,0.002,0.84,1.08,0.31,0.006,0.008,0.018,0.33,1.10,25,4,0,0
+3,gemma2:2b,0.000,0.00,0.00,0.00,0.000,0.000,0.000,0.00,0.00,25,2,0,0

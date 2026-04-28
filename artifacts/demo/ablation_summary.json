@@ -1,0 +1,5 @@
+{
+  "best_sharpe": "no_slippage",
+  "highest_return": "no_slippage",
+  "lowest_drawdown": "no_slippage"
+}

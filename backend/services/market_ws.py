@@ -14,7 +14,7 @@ import websockets
 from pydantic import BaseModel, ConfigDict, Field
 
 BINANCE_WS_BASE = "wss://stream.binance.com:9443/stream"
-DEFAULT_STREAMS = ("btcusdt@trade", "btcusdt@bookTicker", "btcusdt@kline_1m")
+DEFAULT_STREAMS = ("btcusdt@trade", "btcusdt@bookTicker", "btcusdt@kline_1m", "btcusdt@depth20@100ms")
 
 
 class CandleSnapshot(BaseModel):
@@ -29,6 +29,13 @@ class CandleSnapshot(BaseModel):
     closed: bool
 
 
+class OrderBookLevel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    price: float
+    quantity: float
+
+
 class MarketSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -39,6 +46,9 @@ class MarketSnapshot(BaseModel):
     spread_bps: float = 0.0
     volume: float = 0.0
     heartbeat_ts: float | None = None
+    reconnect_count: int = 0
+    bids: list[OrderBookLevel] = Field(default_factory=list)
+    asks: list[OrderBookLevel] = Field(default_factory=list)
     candles: list[CandleSnapshot] = Field(default_factory=list)
 
 
@@ -63,6 +73,9 @@ class BinanceMarketWebSocket:
         self.spread_bps = 0.0
         self.volume = 0.0
         self.heartbeat_ts: float | None = None
+        self.reconnect_count = 0
+        self.bids: list[OrderBookLevel] = []
+        self.asks: list[OrderBookLevel] = []
         self.candle_history: list[CandleSnapshot] = []
         self._shutdown = asyncio.Event()
         self._ws: Any | None = None
@@ -88,6 +101,7 @@ class BinanceMarketWebSocket:
             except Exception:
                 if self._shutdown.is_set():
                     break
+                self.reconnect_count += 1
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, self.backoff_max)
             finally:
@@ -109,6 +123,8 @@ class BinanceMarketWebSocket:
                 self._handle_book_ticker(data)
             elif event_type == "kline":
                 self._handle_kline(data)
+            elif event_type == "depthUpdate":
+                self._handle_depth(data)
         except (TypeError, ValueError, KeyError, json.JSONDecodeError):
             return
 
@@ -121,6 +137,9 @@ class BinanceMarketWebSocket:
             spread_bps=self.spread_bps,
             volume=self.volume,
             heartbeat_ts=self.heartbeat_ts,
+            reconnect_count=self.reconnect_count,
+            bids=list(self.bids),
+            asks=list(self.asks),
             candles=list(self.candle_history),
         )
 
@@ -154,6 +173,20 @@ class BinanceMarketWebSocket:
         self.spread_bps = (ask - bid) / midpoint * 10_000 if midpoint > 0 else 0.0
         self._heartbeat()
 
+    def _handle_depth(self, data: dict[str, Any]) -> None:
+        bids = _levels(data.get("b", []), reverse=True)
+        asks = _levels(data.get("a", []), reverse=False)
+        if bids:
+            self.bids = bids[:20]
+            self.bid = self.bids[0].price
+        if asks:
+            self.asks = asks[:20]
+            self.ask = self.asks[0].price
+        if self.bid is not None and self.ask is not None and self.ask >= self.bid:
+            midpoint = (self.bid + self.ask) / 2
+            self.spread_bps = (self.ask - self.bid) / midpoint * 10_000 if midpoint > 0 else 0.0
+        self._heartbeat()
+
     def _handle_kline(self, data: dict[str, Any]) -> None:
         kline = data["k"]
         candle = CandleSnapshot(
@@ -181,3 +214,16 @@ def _finite_float(value: Any) -> float:
     if not math.isfinite(number):
         raise ValueError("value must be finite")
     return number
+
+
+def _levels(raw_levels: Any, *, reverse: bool) -> list[OrderBookLevel]:
+    levels: list[OrderBookLevel] = []
+    for raw_level in raw_levels:
+        if not isinstance(raw_level, (list, tuple)) or len(raw_level) < 2:
+            continue
+        price = _finite_float(raw_level[0])
+        quantity = _finite_float(raw_level[1])
+        if price <= 0 or quantity <= 0:
+            continue
+        levels.append(OrderBookLevel(price=price, quantity=quantity))
+    return sorted(levels, key=lambda level: level.price, reverse=reverse)
