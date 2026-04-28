@@ -1,0 +1,111 @@
+from db import models, research_repo
+from db.database import SessionLocal, init_db
+
+
+def setup_function(_):
+    init_db()
+    with SessionLocal() as db:
+        db.query(models.RiskEvent).delete()
+        db.query(models.MetricSnapshot).delete()
+        db.query(models.ExecutionFill).delete()
+        db.query(models.InferenceLog).delete()
+        db.query(models.ModelRun).delete()
+        db.query(models.Experiment).delete()
+        db.commit()
+
+
+def test_research_logging_end_to_end_relationship_counts():
+    with SessionLocal() as db:
+        experiment = research_repo.create_experiment(
+            db,
+            name="comparison",
+            description="unit test",
+            config={"models": ["alpha"]},
+        )
+        model_run = research_repo.create_model_run(
+            db,
+            experiment_id=experiment.id,
+            model_name="alpha",
+            seed=7,
+        )
+
+        inference = research_repo.log_inference(
+            db,
+            model_run_id=model_run.id,
+            model_name="alpha",
+            prompt_hash="abc123",
+            raw_response='{"action":"BUY"}',
+            parsed_action="BUY",
+            confidence=0.9,
+            latency_ms=12,
+            success=True,
+        )
+        fill = research_repo.log_execution_fill(
+            db,
+            model_run_id=model_run.id,
+            side="BUY",
+            requested_qty=0.1,
+            filled_qty=0.1,
+            decision_price=100.0,
+            fill_price=100.1,
+            fee=0.01,
+            slippage_bps=10.0,
+            latency_ms=3,
+            realized_pnl=0.0,
+        )
+        metric = research_repo.log_metric_snapshot(
+            db,
+            model_run_id=model_run.id,
+            equity=10_100.0,
+            cumulative_return=0.01,
+            sharpe=1.2,
+            max_drawdown=0.0,
+            win_rate=1.0,
+            profit_factor=2.0,
+        )
+        risk = research_repo.log_risk_event(
+            db,
+            model_run_id=model_run.id,
+            rule_name="confidence_threshold",
+            blocked=False,
+            reason="passed",
+            input_data={"confidence": 0.9},
+        )
+        finished = research_repo.finish_model_run(db, model_run_id=model_run.id)
+
+        db.expire_all()
+        stored_experiment = db.get(models.Experiment, experiment.id)
+        stored_run = db.get(models.ModelRun, model_run.id)
+
+        assert stored_experiment is not None
+        assert stored_run is not None
+        assert len(stored_experiment.model_runs) == 1
+        assert len(stored_run.inference_logs) == 1
+        assert len(stored_run.execution_fills) == 1
+        assert len(stored_run.metric_snapshots) == 1
+        assert len(stored_run.risk_events) == 1
+        assert finished.status == "completed"
+        assert finished.ended_at is not None
+
+        assert inference.id is not None
+        assert fill.id is not None
+        assert metric.id is not None
+        assert risk.id is not None
+
+
+def test_required_research_fields_are_populated():
+    with SessionLocal() as db:
+        experiment = research_repo.create_experiment(db, name="required", config={})
+        model_run = research_repo.create_model_run(db, experiment_id=experiment.id, model_name="alpha")
+
+        assert experiment.id is not None
+        assert experiment.name
+        assert experiment.description is not None
+        assert experiment.config_json
+        assert experiment.created_at is not None
+
+        assert model_run.id is not None
+        assert model_run.experiment_id == experiment.id
+        assert model_run.model_name
+        assert model_run.status
+        assert model_run.started_at is not None

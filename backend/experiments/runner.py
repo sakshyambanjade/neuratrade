@@ -57,6 +57,7 @@ class ExperimentResult(BaseModel):
     fills: int
     rejected: int
     risk_blocked: int
+    avg_latency_ms: float
     cumulative_return: float
     sharpe: float
     max_drawdown: float
@@ -71,6 +72,7 @@ def run_mock_experiment(config: ExperimentConfig) -> ExperimentResult:
     avg_entry_price: float | None = None
     equity_series: list[float] = []
     trade_pnls: list[float] = []
+    latencies: list[int] = []
     fills = 0
     rejected = 0
     risk_blocked = 0
@@ -99,6 +101,7 @@ def run_mock_experiment(config: ExperimentConfig) -> ExperimentResult:
                 quantity = spendable_cash / price if price > 0 else 0.0
                 report = simulator.execute_market_order(_order_request(config, "BUY", quantity, price, cash, btc, avg_entry_price))
                 if report.status == "FILLED":
+                    latencies.append(report.latency_ms)
                     previous_btc = btc
                     cash = report.cash_after
                     btc = report.btc_after
@@ -110,12 +113,14 @@ def run_mock_experiment(config: ExperimentConfig) -> ExperimentResult:
                     )
                     fills += 1
                 else:
+                    latencies.append(report.latency_ms)
                     rejected += 1
         elif action == "SELL" and btc > 0:
             quantity = btc * position_size_pct if position_size_pct > 0 else btc
             quantity = min(quantity, btc)
             report = simulator.execute_market_order(_order_request(config, "SELL", quantity, price, cash, btc, avg_entry_price))
             if report.status == "FILLED":
+                latencies.append(report.latency_ms)
                 cash = report.cash_after
                 btc = report.btc_after
                 trade_pnls.append(report.realized_pnl)
@@ -124,6 +129,7 @@ def run_mock_experiment(config: ExperimentConfig) -> ExperimentResult:
                     avg_entry_price = None
                 fills += 1
             else:
+                latencies.append(report.latency_ms)
                 rejected += 1
 
         equity_series.append(_finite(cash + btc * price))
@@ -136,6 +142,7 @@ def run_mock_experiment(config: ExperimentConfig) -> ExperimentResult:
         fills=fills,
         rejected=rejected,
         risk_blocked=risk_blocked,
+        avg_latency_ms=_finite(sum(latencies) / len(latencies)) if latencies else 0.0,
         cumulative_return=_finite(cumulative_return(equity_series)),
         sharpe=_finite(sharpe_ratio(equity_series)),
         max_drawdown=_finite(max_drawdown(equity_series)),
