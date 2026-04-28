@@ -2,7 +2,12 @@
 Central configuration. Load from environment with safe defaults for paper trading.
 """
 import os
-from dotenv import load_dotenv
+
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv():
+        return False
 
 load_dotenv()
 

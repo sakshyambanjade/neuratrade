@@ -9,7 +9,7 @@ from utils.logging import setup_logging
 
 log = setup_logging()
 
-app = FastAPI(title="Prajnyavan BTC Bot")
+app = FastAPI(title="NeuraTradeBench")
 
 app.add_middleware(
     CORSMiddleware,

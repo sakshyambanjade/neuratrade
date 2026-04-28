@@ -1,4 +1,4 @@
-# Prajnyavan BTC Trading System — Risk Register
+# NeuraTradeBench — Risk Register
 
 Date: 2026-03-15  
 Scope: Paper-trading stack (FastAPI backend, PM2 workers, Prajnyavan/Ollama brain, React/Vite dashboard).
