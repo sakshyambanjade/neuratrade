@@ -52,6 +52,107 @@ class MarketSnapshot(BaseModel):
     candles: list[CandleSnapshot] = Field(default_factory=list)
 
 
+class ValidationResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    valid: bool
+    status: str
+    reason: str = ""
+    data_gap: bool = False
+    age_seconds: float | None = None
+
+
+class TickValidator:
+    def __init__(
+        self,
+        *,
+        max_spread_pct: float = 0.005,
+        max_staleness_sec: float = 5.0,
+        data_gap_sec: float | None = None,
+    ) -> None:
+        self.max_spread_pct = max_spread_pct
+        self.max_staleness_sec = max_staleness_sec
+        self.data_gap_sec = data_gap_sec
+
+    def validate(self, snapshot: MarketSnapshot, *, now: float | None = None) -> ValidationResult:
+        now = time.time() if now is None else now
+        heartbeat_ts = snapshot.heartbeat_ts
+        age_seconds = None if heartbeat_ts is None else max(0.0, now - heartbeat_ts)
+        data_gap = bool(
+            heartbeat_ts is None
+            or (self.data_gap_sec is not None and age_seconds is not None and age_seconds > self.data_gap_sec)
+        )
+
+        if heartbeat_ts is None:
+            return ValidationResult(
+                valid=False,
+                status="missing",
+                reason="no market heartbeat has been received",
+                data_gap=data_gap,
+                age_seconds=age_seconds,
+            )
+        if age_seconds is not None and age_seconds > self.max_staleness_sec:
+            return ValidationResult(
+                valid=False,
+                status="stale",
+                reason=f"market heartbeat age {age_seconds:.3f}s exceeds {self.max_staleness_sec:.3f}s",
+                data_gap=data_gap,
+                age_seconds=age_seconds,
+            )
+        if snapshot.bid is not None and snapshot.ask is not None and snapshot.bid >= snapshot.ask:
+            return ValidationResult(
+                valid=False,
+                status="crossed",
+                reason="bid is greater than or equal to ask",
+                data_gap=data_gap,
+                age_seconds=age_seconds,
+            )
+        if snapshot.last_price is not None and (not math.isfinite(snapshot.last_price) or snapshot.last_price <= 0):
+            return ValidationResult(
+                valid=False,
+                status="zero_price",
+                reason="last price is not finite and positive",
+                data_gap=data_gap,
+                age_seconds=age_seconds,
+            )
+        if snapshot.bid is not None and (not math.isfinite(snapshot.bid) or snapshot.bid <= 0):
+            return ValidationResult(
+                valid=False,
+                status="invalid_bid",
+                reason="bid is not finite and positive",
+                data_gap=data_gap,
+                age_seconds=age_seconds,
+            )
+        if snapshot.ask is not None and (not math.isfinite(snapshot.ask) or snapshot.ask <= 0):
+            return ValidationResult(
+                valid=False,
+                status="invalid_ask",
+                reason="ask is not finite and positive",
+                data_gap=data_gap,
+                age_seconds=age_seconds,
+            )
+        if snapshot.bid is None and snapshot.ask is None and snapshot.last_price is None:
+            return ValidationResult(
+                valid=False,
+                status="missing_price",
+                reason="snapshot has no price, bid, or ask",
+                data_gap=data_gap,
+                age_seconds=age_seconds,
+            )
+
+        spread_pct = snapshot.spread_bps / 10_000
+        if spread_pct > self.max_spread_pct:
+            return ValidationResult(
+                valid=False,
+                status="wide_spread",
+                reason=f"spread {spread_pct:.6f} exceeds {self.max_spread_pct:.6f}",
+                data_gap=data_gap,
+                age_seconds=age_seconds,
+            )
+
+        return ValidationResult(valid=True, status="valid", data_gap=data_gap, age_seconds=age_seconds)
+
+
 class BinanceMarketWebSocket:
     def __init__(
         self,

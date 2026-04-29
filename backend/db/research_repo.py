@@ -89,6 +89,9 @@ def log_inference(
     temperature: float = 0.0,
     ollama_model_tag: str = "",
     hardware_tag: str = "",
+    market_tick_id: int | None = None,
+    cycle_indicator_id: int | None = None,
+    data_quality: str = "valid",
 ) -> models.InferenceLog:
     row = models.InferenceLog(
         model_run_id=model_run_id,
@@ -100,6 +103,9 @@ def log_inference(
         temperature=temperature,
         ollama_model_tag=ollama_model_tag or model_name,
         hardware_tag=hardware_tag,
+        market_tick_id=market_tick_id,
+        cycle_indicator_id=cycle_indicator_id,
+        data_quality=data_quality,
         raw_response=raw_response,
         parsed_action=parsed_action,
         confidence=confidence,
@@ -156,6 +162,7 @@ def log_metric_snapshot(
     max_drawdown: float,
     win_rate: float,
     profit_factor: float,
+    data_gap: bool = False,
 ) -> models.MetricSnapshot:
     row = models.MetricSnapshot(
         model_run_id=model_run_id,
@@ -166,6 +173,7 @@ def log_metric_snapshot(
         max_drawdown=max_drawdown,
         win_rate=win_rate,
         profit_factor=profit_factor,
+        data_gap=data_gap,
     )
     db.add(row)
     db.commit()
@@ -189,6 +197,117 @@ def log_risk_event(
         blocked=blocked,
         reason=reason,
         input_json=_json(input_data or {}),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def log_market_tick(
+    db: Session,
+    *,
+    model_run_id: int,
+    experiment_id: int | None,
+    cycle_index: int,
+    timestamp_utc: float,
+    received_at: float,
+    symbol: str,
+    bid: float | None,
+    ask: float | None,
+    last_price: float | None,
+    volume_24h: float | None,
+    spread_bps: float,
+    source: str,
+    raw_json: str | dict[str, Any],
+    validation_status: str,
+    validation_reason: str = "",
+    data_gap: bool = False,
+) -> models.MarketTick:
+    row = models.MarketTick(
+        model_run_id=model_run_id,
+        experiment_id=experiment_id,
+        cycle_index=cycle_index,
+        timestamp_utc=timestamp_utc,
+        received_at=received_at,
+        symbol=symbol,
+        bid=bid,
+        ask=ask,
+        last_price=last_price,
+        volume_24h=volume_24h,
+        spread_bps=spread_bps,
+        source=source,
+        raw_json=raw_json if isinstance(raw_json, str) else _json(raw_json),
+        validation_status=validation_status,
+        validation_reason=validation_reason,
+        data_gap=data_gap,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def log_cycle_indicators(
+    db: Session,
+    *,
+    model_run_id: int,
+    experiment_id: int | None,
+    market_tick_id: int | None,
+    cycle_index: int,
+    timestamp_utc: float,
+    rsi_14: float | None = None,
+    ema_9: float | None = None,
+    ema_21: float | None = None,
+    vwap: float | None = None,
+    bb_upper: float | None = None,
+    bb_middle: float | None = None,
+    bb_lower: float | None = None,
+    adx_14: float | None = None,
+    regime: str = "unknown",
+    source_data: dict[str, Any] | None = None,
+) -> models.CycleIndicator:
+    row = models.CycleIndicator(
+        model_run_id=model_run_id,
+        experiment_id=experiment_id,
+        market_tick_id=market_tick_id,
+        cycle_index=cycle_index,
+        timestamp_utc=timestamp_utc,
+        rsi_14=rsi_14,
+        ema_9=ema_9,
+        ema_21=ema_21,
+        vwap=vwap,
+        bb_upper=bb_upper,
+        bb_middle=bb_middle,
+        bb_lower=bb_lower,
+        adx_14=adx_14,
+        regime=regime,
+        source_json=_json(source_data or {}),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def log_experiment_artifact(
+    db: Session,
+    *,
+    experiment_id: int | None,
+    model_run_id: int | None,
+    artifact_type: str,
+    path: str,
+    sha256: str = "",
+    metadata: dict[str, Any] | None = None,
+) -> models.ExperimentArtifact:
+    row = models.ExperimentArtifact(
+        experiment_id=experiment_id,
+        model_run_id=model_run_id,
+        created_at=_now(),
+        artifact_type=artifact_type,
+        path=path,
+        sha256=sha256,
+        metadata_json=_json(metadata or {}),
     )
     db.add(row)
     db.commit()

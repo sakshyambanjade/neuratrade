@@ -1,6 +1,7 @@
 import math
+import time
 
-from services.market_ws import BinanceMarketWebSocket, MarketSnapshot
+from services.market_ws import BinanceMarketWebSocket, MarketSnapshot, TickValidator
 
 
 def test_trade_message_updates_last_price():
@@ -98,3 +99,53 @@ def test_get_snapshot_returns_valid_data():
     assert snapshot.last_price == 50000
     assert math.isfinite(snapshot.spread_bps)
     assert snapshot.spread_bps > 0
+
+
+def test_tick_validator_accepts_fresh_valid_snapshot():
+    snapshot = MarketSnapshot(
+        symbol="BTCUSDT",
+        last_price=100.0,
+        bid=99.9,
+        ask=100.1,
+        spread_bps=20.0,
+        heartbeat_ts=time.time(),
+    )
+
+    result = TickValidator(max_staleness_sec=5, data_gap_sec=120).validate(snapshot)
+
+    assert result.valid is True
+    assert result.status == "valid"
+    assert result.data_gap is False
+
+
+def test_tick_validator_rejects_stale_data_gap():
+    snapshot = MarketSnapshot(
+        symbol="BTCUSDT",
+        last_price=100.0,
+        bid=99.9,
+        ask=100.1,
+        spread_bps=20.0,
+        heartbeat_ts=time.time() - 180,
+    )
+
+    result = TickValidator(max_staleness_sec=5, data_gap_sec=120).validate(snapshot)
+
+    assert result.valid is False
+    assert result.status == "stale"
+    assert result.data_gap is True
+
+
+def test_tick_validator_rejects_crossed_spread():
+    snapshot = MarketSnapshot(
+        symbol="BTCUSDT",
+        last_price=100.0,
+        bid=101.0,
+        ask=100.0,
+        spread_bps=0.0,
+        heartbeat_ts=time.time(),
+    )
+
+    result = TickValidator().validate(snapshot)
+
+    assert result.valid is False
+    assert result.status == "crossed"

@@ -5,6 +5,9 @@ from db.database import SessionLocal, init_db
 def setup_function(_):
     init_db()
     with SessionLocal() as db:
+        db.query(models.ExperimentArtifact).delete()
+        db.query(models.CycleIndicator).delete()
+        db.query(models.MarketTick).delete()
         db.query(models.RiskEvent).delete()
         db.query(models.MetricSnapshot).delete()
         db.query(models.ExecutionFill).delete()
@@ -49,6 +52,9 @@ def test_research_logging_end_to_end_relationship_counts():
             temperature=0.0,
             ollama_model_tag="alpha:latest",
             hardware_tag="ci",
+            market_tick_id=None,
+            cycle_indicator_id=None,
+            data_quality="valid",
         )
         fill = research_repo.log_execution_fill(
             db,
@@ -105,6 +111,78 @@ def test_research_logging_end_to_end_relationship_counts():
         assert fill.id is not None
         assert metric.id is not None
         assert risk.id is not None
+
+
+def test_research_logging_persists_market_context_and_artifacts():
+    with SessionLocal() as db:
+        experiment = research_repo.create_experiment(db, name="phase1", config={"execution_mode": "paper_trading"})
+        model_run = research_repo.create_model_run(db, experiment_id=experiment.id, model_name="alpha")
+        tick = research_repo.log_market_tick(
+            db,
+            model_run_id=model_run.id,
+            experiment_id=experiment.id,
+            cycle_index=0,
+            timestamp_utc=123.0,
+            received_at=124.0,
+            symbol="BTCUSDT",
+            bid=99.0,
+            ask=101.0,
+            last_price=100.0,
+            volume_24h=10.0,
+            spread_bps=200.0,
+            source="binance_ws",
+            raw_json={"price": 100.0},
+            validation_status="valid",
+            validation_reason="",
+            data_gap=False,
+        )
+        indicators = research_repo.log_cycle_indicators(
+            db,
+            model_run_id=model_run.id,
+            experiment_id=experiment.id,
+            market_tick_id=tick.id,
+            cycle_index=0,
+            timestamp_utc=123.0,
+            rsi_14=50.0,
+            ema_9=100.0,
+            ema_21=99.0,
+            vwap=100.2,
+            bb_upper=105.0,
+            bb_middle=100.0,
+            bb_lower=95.0,
+            adx_14=20.0,
+            regime="ranging",
+            source_data={"closed_candles": 20},
+        )
+        inference = research_repo.log_inference(
+            db,
+            model_run_id=model_run.id,
+            model_name="alpha",
+            prompt_hash="hash",
+            raw_response='{"action":"HOLD"}',
+            parsed_action="HOLD",
+            confidence=0.5,
+            latency_ms=10,
+            success=True,
+            market_tick_id=tick.id,
+            cycle_indicator_id=indicators.id,
+            data_quality="valid",
+        )
+        artifact = research_repo.log_experiment_artifact(
+            db,
+            experiment_id=experiment.id,
+            model_run_id=model_run.id,
+            artifact_type="data_manifest",
+            path="data/manifest.sha256",
+            sha256="abc",
+            metadata={"execution_mode": "paper_trading"},
+        )
+
+        assert tick.id is not None
+        assert indicators.market_tick_id == tick.id
+        assert inference.market_tick_id == tick.id
+        assert inference.cycle_indicator_id == indicators.id
+        assert artifact.artifact_type == "data_manifest"
 
 
 def test_required_research_fields_are_populated():

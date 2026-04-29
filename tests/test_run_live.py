@@ -1,5 +1,6 @@
 import asyncio
 import math
+import time
 from contextlib import nullcontext
 
 from experiments.run_live import LiveExperimentRunner, LiveRunConfig
@@ -17,7 +18,7 @@ class FakeMarket:
             ask=100.1,
             spread_bps=20.0,
             volume=100.0,
-            heartbeat_ts=1.0,
+            heartbeat_ts=time.time(),
         )
         self.shutdown_called = False
 
@@ -52,6 +53,8 @@ class FakeRepo:
         self.fills = []
         self.metrics = []
         self.risks = []
+        self.market_ticks = []
+        self.cycle_indicators = []
         self.finished = []
         self.experiment_id = 1
         self.model_run_id = 2
@@ -73,6 +76,14 @@ class FakeRepo:
 
     def log_risk_event(self, db, **kwargs):
         self.risks.append(kwargs)
+
+    def log_market_tick(self, db, **kwargs):
+        self.market_ticks.append(kwargs)
+        return type("MarketTick", (), {"id": len(self.market_ticks)})()
+
+    def log_cycle_indicators(self, db, **kwargs):
+        self.cycle_indicators.append(kwargs)
+        return type("CycleIndicator", (), {"id": len(self.cycle_indicators)})()
 
     def finish_model_run(self, db, **kwargs):
         self.finished.append(kwargs)
@@ -121,8 +132,13 @@ def test_one_cycle_completes():
     asyncio.run(runner.run_cycle())
 
     assert runner.state.cycles_completed == 1
+    assert len(repo.market_ticks) == 1
+    assert len(repo.cycle_indicators) == 1
     assert len(repo.inferences) == 1
     assert len(repo.metrics) == 1
+    assert repo.inferences[0]["market_tick_id"] == 1
+    assert repo.inferences[0]["cycle_indicator_id"] == 1
+    assert repo.inferences[0]["data_quality"] == "valid"
 
 
 def test_hold_does_not_execute_trade():
@@ -215,3 +231,42 @@ def test_no_nan_or_inf_in_metrics():
         metric["profit_factor"],
     ]
     assert all(math.isfinite(value) for value in values)
+
+
+def test_stale_market_snapshot_is_logged_and_skipped():
+    repo = FakeRepo()
+    stale_snapshot = MarketSnapshot(
+        symbol="BTCUSDT",
+        last_price=100.0,
+        bid=99.9,
+        ask=100.1,
+        spread_bps=20.0,
+        volume=100.0,
+        heartbeat_ts=time.time() - 10,
+    )
+    runner = LiveExperimentRunner(
+        LiveRunConfig(
+            model_name="mock",
+            cycle_interval_seconds=1,
+            max_cycles=1,
+            tick_staleness_max_sec=2,
+            data_gap_multiplier=2,
+        ),
+        market_feed=FakeMarket(stale_snapshot),
+        ollama_client=FakeOllama(_decision()),
+        risk_engine=FakeRisk(
+            RiskDecision(allowed=True, final_action="BUY", final_size_pct=0.1, reason="ok", triggered_rules=[])
+        ),
+        execution_simulator=ExecutionSimulator(),
+        session_factory=_session_factory,
+        repo=repo,
+    )
+
+    asyncio.run(runner.run_cycle())
+
+    assert runner.state.cycles_completed == 1
+    assert runner.state.data_gap_cycles == 1
+    assert repo.market_ticks[0]["validation_status"] == "stale"
+    assert repo.market_ticks[0]["data_gap"] is True
+    assert repo.inferences == []
+    assert repo.metrics == []

@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from db import research_repo
 from db.database import SessionLocal, init_db
 from services.execution import ExecutionSimulator, OrderRequest
-from services.market_ws import BinanceMarketWebSocket, MarketSnapshot
+from services.market_ws import BinanceMarketWebSocket, MarketSnapshot, TickValidator
 from services.metrics import cumulative_return, max_drawdown, profit_factor, sharpe_ratio, win_rate
 from services.ollama_client import OllamaClient, OllamaDecision, fallback_decision
 from services.risk_engine import RiskEngine, RiskInput
@@ -45,6 +45,9 @@ class LiveRunConfig(BaseModel):
     fee_bps: float = Field(default=10.0, ge=0)
     minute_volume_default: float = Field(default=100.0, ge=0)
     volatility_default: float = Field(default=0.0, ge=0)
+    tick_staleness_max_sec: float = Field(default=5.0, gt=0)
+    max_spread_pct: float = Field(default=0.005, gt=0)
+    data_gap_multiplier: float = Field(default=2.0, gt=0)
 
     @field_validator("dry_run")
     @classmethod
@@ -67,6 +70,7 @@ class LiveRunState(BaseModel):
     equity_series: list[float] = Field(default_factory=list)
     trade_pnls: list[float] = Field(default_factory=list)
     consecutive_losses: int = 0
+    data_gap_cycles: int = 0
 
 
 class LiveExperimentRunner:
@@ -80,6 +84,7 @@ class LiveExperimentRunner:
         execution_simulator: Any | None = None,
         session_factory: Callable[[], Any] = SessionLocal,
         repo: Any = research_repo,
+        tick_validator: TickValidator | None = None,
     ) -> None:
         self.config = config
         self.market_feed = market_feed or BinanceMarketWebSocket(symbol=config.symbol.lower())
@@ -88,6 +93,11 @@ class LiveExperimentRunner:
         self.execution_simulator = execution_simulator or ExecutionSimulator()
         self.session_factory = session_factory
         self.repo = repo
+        self.tick_validator = tick_validator or TickValidator(
+            max_spread_pct=config.max_spread_pct,
+            max_staleness_sec=config.tick_staleness_max_sec,
+            data_gap_sec=max(config.tick_staleness_max_sec, config.cycle_interval_seconds * config.data_gap_multiplier),
+        )
         self.state = LiveRunState(cash=config.starting_balance, btc=config.starting_btc)
         self._stop_event = asyncio.Event()
         self._market_task: asyncio.Task | None = None
@@ -130,12 +140,16 @@ class LiveExperimentRunner:
     async def run_cycle(self) -> LiveRunState:
         self._ensure_research_run()
         snapshot = self.market_feed.get_snapshot()
+        validation = self.tick_validator.validate(snapshot)
+        market_tick_id = self._log_market_tick(snapshot, validation)
         price = _snapshot_price(snapshot)
-        if price is None:
-            self._log_metrics(price=0.0)
+        if validation.data_gap:
+            self.state.data_gap_cycles += 1
+        if not validation.valid or price is None:
             self.state.cycles_completed += 1
             return self.state
 
+        cycle_indicator_id = self._log_cycle_indicators(snapshot, market_tick_id=market_tick_id)
         prompt = self._build_prompt(snapshot)
         started = time.perf_counter()
         try:
@@ -148,7 +162,16 @@ class LiveExperimentRunner:
             error = str(exc)
         inference_latency_ms = int((time.perf_counter() - started) * 1000)
         decision_data = _decision_dict(decision)
-        self._log_inference(prompt, decision_data, inference_latency_ms, success, error)
+        self._log_inference(
+            prompt,
+            decision_data,
+            inference_latency_ms,
+            success,
+            error,
+            market_tick_id=market_tick_id,
+            cycle_indicator_id=cycle_indicator_id,
+            data_quality=validation.status,
+        )
 
         equity = self._equity(price)
         risk_decision = self.risk_engine.validate(
@@ -251,6 +274,10 @@ class LiveExperimentRunner:
         latency_ms: int,
         success: bool,
         error: str,
+        *,
+        market_tick_id: int | None = None,
+        cycle_indicator_id: int | None = None,
+        data_quality: str = "valid",
     ) -> None:
         model_run_id = self._model_run_id()
         self._with_db(
@@ -270,8 +297,56 @@ class LiveExperimentRunner:
                 temperature=self.config.temperature,
                 ollama_model_tag=self.config.ollama_model_tag or self.config.model_name,
                 hardware_tag=self.config.hardware_tag,
+                market_tick_id=market_tick_id,
+                cycle_indicator_id=cycle_indicator_id,
+                data_quality=data_quality,
             )
         )
+
+    def _log_market_tick(self, snapshot: MarketSnapshot, validation: Any) -> int | None:
+        model_run_id = self._model_run_id()
+
+        def log_tick(db: Any) -> Any:
+            return self.repo.log_market_tick(
+                db,
+                model_run_id=model_run_id,
+                experiment_id=self.state.experiment_id,
+                cycle_index=self.state.cycles_completed,
+                timestamp_utc=float(snapshot.heartbeat_ts or time.time()),
+                received_at=time.time(),
+                symbol=snapshot.symbol,
+                bid=snapshot.bid,
+                ask=snapshot.ask,
+                last_price=snapshot.last_price,
+                volume_24h=snapshot.volume,
+                spread_bps=snapshot.spread_bps,
+                source="binance_ws",
+                raw_json=snapshot.model_dump(mode="json"),
+                validation_status=validation.status,
+                validation_reason=validation.reason,
+                data_gap=validation.data_gap,
+            )
+
+        row = self._with_db(log_tick)
+        return getattr(row, "id", None)
+
+    def _log_cycle_indicators(self, snapshot: MarketSnapshot, *, market_tick_id: int | None) -> int | None:
+        model_run_id = self._model_run_id()
+        indicators = _cycle_indicator_values(snapshot)
+
+        def log_indicators(db: Any) -> Any:
+            return self.repo.log_cycle_indicators(
+                db,
+                model_run_id=model_run_id,
+                experiment_id=self.state.experiment_id,
+                market_tick_id=market_tick_id,
+                cycle_index=self.state.cycles_completed,
+                timestamp_utc=float(snapshot.heartbeat_ts or time.time()),
+                **indicators,
+            )
+
+        row = self._with_db(log_indicators)
+        return getattr(row, "id", None)
 
     def _log_execution(self, report: Any, *, decision_price: float) -> None:
         model_run_id = self._model_run_id()
@@ -308,8 +383,10 @@ class LiveExperimentRunner:
 
             self._with_db(log_event)
 
-    def _log_metrics(self, *, price: float) -> None:
+    def _log_metrics(self, *, price: float, data_gap: bool = False) -> None:
         model_run_id = self._model_run_id()
+        if data_gap:
+            return
         equity = self._equity(price) if price > 0 else self.state.cash
         self.state.equity_series.append(_finite(equity))
         metric_values = {
@@ -324,6 +401,7 @@ class LiveExperimentRunner:
             lambda db: self.repo.log_metric_snapshot(
                 db,
                 model_run_id=model_run_id,
+                data_gap=data_gap,
                 **metric_values,
             )
         )
@@ -364,6 +442,137 @@ def _snapshot_price(snapshot: MarketSnapshot) -> float | None:
     if price is None or not math.isfinite(price) or price <= 0:
         return None
     return price
+
+
+def _cycle_indicator_values(snapshot: MarketSnapshot) -> dict[str, Any]:
+    candles = [candle for candle in snapshot.candles if candle.closed]
+    closes = [_finite(candle.close) for candle in candles if _finite(candle.close) > 0]
+    highs = [_finite(candle.high) for candle in candles if _finite(candle.high) > 0]
+    lows = [_finite(candle.low) for candle in candles if _finite(candle.low) > 0]
+    volumes = [_finite(candle.volume) for candle in candles]
+    price = _snapshot_price(snapshot)
+
+    if not closes and price is not None:
+        closes = [price]
+        highs = [price]
+        lows = [price]
+        volumes = [max(_finite(snapshot.volume), 0.0)]
+
+    ema_9 = _ema(closes, 9)
+    ema_21 = _ema(closes, 21)
+    bb_upper, bb_middle, bb_lower = _bollinger(closes)
+    rsi_14 = _rsi(closes)
+    vwap = _vwap(candles)
+    adx_14 = _adx(highs, lows, closes)
+    regime = _regime(closes, ema_21, adx_14, volumes)
+    return {
+        "rsi_14": rsi_14,
+        "ema_9": ema_9,
+        "ema_21": ema_21,
+        "vwap": vwap,
+        "bb_upper": bb_upper,
+        "bb_middle": bb_middle,
+        "bb_lower": bb_lower,
+        "adx_14": adx_14,
+        "regime": regime,
+        "source_data": {
+            "closed_candles": len(candles),
+            "bid_depth_levels": len(snapshot.bids),
+            "ask_depth_levels": len(snapshot.asks),
+        },
+    }
+
+
+def _ema(values: list[float], period: int) -> float | None:
+    if not values:
+        return None
+    window = values[-max(period * 3, period) :]
+    k = 2 / (period + 1)
+    result = window[0]
+    for value in window[1:]:
+        result = value * k + result * (1 - k)
+    return _finite(result)
+
+
+def _rsi(values: list[float], period: int = 14) -> float | None:
+    if len(values) < period + 1:
+        return None
+    gains = []
+    losses = []
+    for previous, current in zip(values[-(period + 1) :], values[-period:], strict=False):
+        change = current - previous
+        gains.append(max(change, 0.0))
+        losses.append(max(-change, 0.0))
+    avg_gain = sum(gains) / period
+    avg_loss = sum(losses) / period
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return _finite(100 - (100 / (1 + rs)))
+
+
+def _bollinger(
+    values: list[float], period: int = 20, mult: float = 2.0
+) -> tuple[float | None, float | None, float | None]:
+    if len(values) < period:
+        return None, None, None
+    window = values[-period:]
+    middle = sum(window) / period
+    variance = sum((value - middle) ** 2 for value in window) / period
+    std = math.sqrt(variance)
+    return _finite(middle + mult * std), _finite(middle), _finite(middle - mult * std)
+
+
+def _vwap(candles: list[Any], period: int = 20) -> float | None:
+    window = candles[-period:]
+    weighted_total = 0.0
+    volume_total = 0.0
+    for candle in window:
+        typical = (_finite(candle.high) + _finite(candle.low) + _finite(candle.close)) / 3
+        volume = max(_finite(candle.volume), 0.0)
+        weighted_total += typical * volume
+        volume_total += volume
+    if volume_total <= 0:
+        return None
+    return _finite(weighted_total / volume_total)
+
+
+def _adx(highs: list[float], lows: list[float], closes: list[float], period: int = 14) -> float | None:
+    if len(highs) < period + 1 or len(lows) < period + 1 or len(closes) < period + 1:
+        return None
+    true_ranges = []
+    for index in range(1, len(closes)):
+        true_ranges.append(
+            max(
+                highs[index] - lows[index],
+                abs(highs[index] - closes[index - 1]),
+                abs(lows[index] - closes[index - 1]),
+            )
+        )
+    avg_true_range = sum(true_ranges[-period:]) / period
+    if avg_true_range <= 0:
+        return 0.0
+    directional_move = abs(closes[-1] - closes[-period])
+    return _finite(min(100.0, directional_move / avg_true_range * 100 / period))
+
+
+def _regime(closes: list[float], ema_21: float | None, adx_14: float | None, volumes: list[float]) -> str:
+    if len(volumes) >= 20 and volumes[-1] < sorted(volumes[-20:])[3]:
+        return "low_liquidity"
+    if len(closes) >= 31:
+        returns = [abs(current / previous - 1) for previous, current in zip(closes[-31:-1], closes[-30:], strict=False)]
+        recent_vol = sum(returns[-5:]) / 5 if len(returns) >= 5 else 0.0
+        avg_vol = sum(returns) / len(returns) if returns else 0.0
+        if avg_vol > 0 and recent_vol > avg_vol * 2:
+            return "high_volatility"
+    if adx_14 is not None and adx_14 < 25:
+        return "ranging"
+    if ema_21 is not None and closes:
+        if closes[-1] > ema_21:
+            return "bull"
+        if closes[-1] < ema_21:
+            return "bear"
+    return "unknown"
 
 
 def _decision_dict(decision: Any) -> dict[str, Any]:

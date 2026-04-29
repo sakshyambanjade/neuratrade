@@ -119,6 +119,21 @@ class ModelRun(Base):
         back_populates="model_run",
         cascade="all, delete-orphan",
     )
+    market_ticks = relationship(
+        "MarketTick",
+        back_populates="model_run",
+        cascade="all, delete-orphan",
+    )
+    cycle_indicators = relationship(
+        "CycleIndicator",
+        back_populates="model_run",
+        cascade="all, delete-orphan",
+    )
+    experiment_artifacts = relationship(
+        "ExperimentArtifact",
+        back_populates="model_run",
+        cascade="all, delete-orphan",
+    )
 
 
 class InferenceLog(Base):
@@ -134,6 +149,9 @@ class InferenceLog(Base):
     temperature = Column(Float, nullable=False, default=0.0)
     ollama_model_tag = Column(String, nullable=False, default="")
     hardware_tag = Column(String, nullable=False, default="")
+    market_tick_id = Column(Integer, ForeignKey("market_ticks.id"), nullable=True, index=True)
+    cycle_indicator_id = Column(Integer, ForeignKey("cycle_indicators.id"), nullable=True, index=True)
+    data_quality = Column(String, nullable=False, default="valid")
     raw_response = Column(Text, nullable=False)
     parsed_action = Column(String, nullable=False)
     confidence = Column(Float, nullable=False)
@@ -175,6 +193,7 @@ class MetricSnapshot(Base):
     max_drawdown = Column(Float, nullable=False)
     win_rate = Column(Float, nullable=False)
     profit_factor = Column(Float, nullable=False)
+    data_gap = Column(Boolean, nullable=False, default=False)
 
     model_run = relationship("ModelRun", back_populates="metric_snapshots")
 
@@ -191,3 +210,65 @@ class RiskEvent(Base):
     input_json = Column(Text, nullable=False)
 
     model_run = relationship("ModelRun", back_populates="risk_events")
+
+
+class MarketTick(Base):
+    __tablename__ = "market_ticks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    model_run_id = Column(Integer, ForeignKey("model_runs.id"), nullable=False, index=True)
+    experiment_id = Column(Integer, ForeignKey("experiments.id"), nullable=True, index=True)
+    cycle_index = Column(Integer, nullable=False)
+    timestamp_utc = Column(Float, nullable=False)
+    received_at = Column(Float, nullable=False)
+    symbol = Column(String, nullable=False)
+    bid = Column(Float, nullable=True)
+    ask = Column(Float, nullable=True)
+    last_price = Column(Float, nullable=True)
+    volume_24h = Column(Float, nullable=True)
+    spread_bps = Column(Float, nullable=False, default=0.0)
+    source = Column(String, nullable=False, default="binance_ws")
+    raw_json = Column(Text, nullable=False, default="{}")
+    validation_status = Column(String, nullable=False)
+    validation_reason = Column(Text, nullable=False, default="")
+    data_gap = Column(Boolean, nullable=False, default=False)
+
+    model_run = relationship("ModelRun", back_populates="market_ticks")
+
+
+class CycleIndicator(Base):
+    __tablename__ = "cycle_indicators"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    model_run_id = Column(Integer, ForeignKey("model_runs.id"), nullable=False, index=True)
+    experiment_id = Column(Integer, ForeignKey("experiments.id"), nullable=True, index=True)
+    market_tick_id = Column(Integer, ForeignKey("market_ticks.id"), nullable=True, index=True)
+    cycle_index = Column(Integer, nullable=False)
+    timestamp_utc = Column(Float, nullable=False)
+    rsi_14 = Column(Float, nullable=True)
+    ema_9 = Column(Float, nullable=True)
+    ema_21 = Column(Float, nullable=True)
+    vwap = Column(Float, nullable=True)
+    bb_upper = Column(Float, nullable=True)
+    bb_middle = Column(Float, nullable=True)
+    bb_lower = Column(Float, nullable=True)
+    adx_14 = Column(Float, nullable=True)
+    regime = Column(String, nullable=False, default="unknown")
+    source_json = Column(Text, nullable=False, default="{}")
+
+    model_run = relationship("ModelRun", back_populates="cycle_indicators")
+
+
+class ExperimentArtifact(Base):
+    __tablename__ = "experiment_artifacts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    experiment_id = Column(Integer, ForeignKey("experiments.id"), nullable=True, index=True)
+    model_run_id = Column(Integer, ForeignKey("model_runs.id"), nullable=True, index=True)
+    created_at = Column(Integer, nullable=False)
+    artifact_type = Column(String, nullable=False)
+    path = Column(Text, nullable=False)
+    sha256 = Column(String, nullable=False, default="")
+    metadata_json = Column(Text, nullable=False, default="{}")
+
+    model_run = relationship("ModelRun", back_populates="experiment_artifacts")

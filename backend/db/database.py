@@ -46,6 +46,12 @@ def _ensure_research_metadata_columns():
             "temperature": "FLOAT DEFAULT 0.0 NOT NULL",
             "ollama_model_tag": "VARCHAR DEFAULT '' NOT NULL",
             "hardware_tag": "VARCHAR DEFAULT '' NOT NULL",
+            "market_tick_id": "INTEGER",
+            "cycle_indicator_id": "INTEGER",
+            "data_quality": "VARCHAR DEFAULT 'valid' NOT NULL",
+        },
+        "metric_snapshots": {
+            "data_gap": "BOOLEAN DEFAULT 0 NOT NULL",
         },
     }
     with engine.begin() as connection:
