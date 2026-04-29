@@ -47,6 +47,19 @@ if ! ollama list | awk 'NR > 1 {print $1}' | grep -Fxq "$MODEL"; then
   exit 1
 fi
 
+if [[ "${SKIP_MARKET_PREFLIGHT:-false}" != "true" ]]; then
+  if ! "$PYTHON_BIN" - <<'PY'
+import socket
+
+for host in ("stream.binance.com", "api.binance.com"):
+    socket.getaddrinfo(host, 443)
+PY
+  then
+    echo "Cannot resolve Binance market data hosts. Fix DNS/network/VPN, or set SKIP_MARKET_PREFLIGHT=true for a gap-only diagnostic run." >&2
+    exit 1
+  fi
+fi
+
 mkdir -p "$ARTIFACT_DIR"
 export DB_PATH
 export LLM_MODEL="$MODEL"
@@ -65,7 +78,8 @@ config = LiveRunConfig(
     max_cycles=int("${MAX_CYCLES}"),
     dry_run=True,
 )
-write_experiment_start(config.model_dump(), artifact_dir="${ARTIFACT_DIR}")
+artifact_path = write_experiment_start(config.model_dump(), artifact_dir="${ARTIFACT_DIR}")
+print(f"Wrote experiment metadata: {artifact_path}")
 state = asyncio.run(LiveExperimentRunner(config).start())
 print(state.model_dump_json(indent=2))
 PY

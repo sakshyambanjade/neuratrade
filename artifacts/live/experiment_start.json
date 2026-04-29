@@ -1,6 +1,6 @@
 {
   "execution_mode": "paper_trading",
-  "started_at": 1777469492,
+  "started_at": 1777470883,
   "config": {
     "model_name": "qwen2.5:7b",
     "symbol": "BTCUSDT",
@@ -38,7 +38,7 @@
   },
   "ollama": {
     "version": "ollama version is 0.22.0",
-    "models": "NAME                       ID              SIZE      MODIFIED       \nqwen2.5:7b                 845dbda0ea48    4.7 GB    19 minutes ago    \nqwen3-coder:30b            06c1097efce0    18 GB     25 hours ago      \nqwen2.5-coder:14b          9ec8897f747e    9.0 GB    2 days ago        \nnomic-embed-text:latest    0a109f422b47    274 MB    11 days ago       \nqwen2.5-coder:7b           dae161e27b0e    4.7 GB    11 days ago"
+    "models": "NAME                       ID              SIZE      MODIFIED       \nqwen2.5:7b                 845dbda0ea48    4.7 GB    42 minutes ago    \nqwen3-coder:30b            06c1097efce0    18 GB     25 hours ago      \nqwen2.5-coder:14b          9ec8897f747e    9.0 GB    2 days ago        \nnomic-embed-text:latest    0a109f422b47    274 MB    11 days ago       \nqwen2.5-coder:7b           dae161e27b0e    4.7 GB    11 days ago"
   },
   "artifact_dir": "/Users/skb/Documents/NeuraPlay/neuratrade/artifacts/live"
 }

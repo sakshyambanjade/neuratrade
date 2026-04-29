@@ -63,7 +63,9 @@ class OllamaDecisionError(RuntimeError):
     """Raised when Ollama does not return a valid decision."""
 
 
-def fallback_decision(reasoning: str = "Ollama unavailable; holding") -> OllamaDecision:
+def fallback_decision(
+    reasoning: str = "Ollama unavailable during paper-trading inference, so the system is holding safely.",
+) -> OllamaDecision:
     return OllamaDecision(
         action="HOLD",
         confidence=0.0,

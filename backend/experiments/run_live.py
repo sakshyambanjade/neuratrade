@@ -172,7 +172,7 @@ class LiveExperimentRunner:
         prompt = self._build_prompt(snapshot, indicator_values)
         started = time.perf_counter()
         try:
-            decision = self.ollama_client.decide(prompt, fallback_on_error=True)
+            decision = self.ollama_client.decide(prompt, fallback_on_error=False)
             success = True
             error = ""
         except Exception as exc:
