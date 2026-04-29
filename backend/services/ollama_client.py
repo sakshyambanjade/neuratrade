@@ -106,7 +106,8 @@ class OllamaClient:
                 return self._request_decision(prompt)
             except (httpx.TimeoutException, httpx.HTTPError, OllamaDecisionError) as exc:
                 last_error = exc
-        raise OllamaDecisionError("Ollama decision failed") from last_error
+        detail = f": {last_error}" if last_error else ""
+        raise OllamaDecisionError(f"Ollama decision failed{detail}") from last_error
 
     def _request_decision(self, prompt: str) -> OllamaDecision:
         payload = {
