@@ -1,4 +1,4 @@
-.PHONY: paper-demo test lint
+.PHONY: paper-demo test lint run
 
 paper-demo:
 	scripts/paper_demo.sh
@@ -8,3 +8,6 @@ test:
 
 lint:
 	scripts/lint.sh
+
+run:
+	scripts/start_experiment.sh

@@ -5,6 +5,9 @@ from db.database import SessionLocal, init_db
 def setup_function(_):
     init_db()
     with SessionLocal() as db:
+        db.query(models.StatisticalTest).delete()
+        db.query(models.BaselineRun).delete()
+        db.query(models.LLMHallucination).delete()
         db.query(models.ExperimentArtifact).delete()
         db.query(models.CycleIndicator).delete()
         db.query(models.MarketTick).delete()
@@ -13,6 +16,7 @@ def setup_function(_):
         db.query(models.ExecutionFill).delete()
         db.query(models.InferenceLog).delete()
         db.query(models.ModelRun).delete()
+        db.query(models.PromptTemplate).delete()
         db.query(models.Experiment).delete()
         db.commit()
 
@@ -166,7 +170,20 @@ def test_research_logging_persists_market_context_and_artifacts():
             success=True,
             market_tick_id=tick.id,
             cycle_indicator_id=indicators.id,
+            prompt_template_id=None,
+            rendered_prompt="prompt",
             data_quality="valid",
+        )
+        hallucination = research_repo.log_llm_hallucination(
+            db,
+            experiment_id=experiment.id,
+            model_run_id=model_run.id,
+            inference_log_id=inference.id,
+            cycle_index=0,
+            timestamp_utc=123.0,
+            model_name="alpha",
+            raw_output="{}",
+            hallucination_type="reasoning_too_short",
         )
         artifact = research_repo.log_experiment_artifact(
             db,
@@ -182,7 +199,45 @@ def test_research_logging_persists_market_context_and_artifacts():
         assert indicators.market_tick_id == tick.id
         assert inference.market_tick_id == tick.id
         assert inference.cycle_indicator_id == indicators.id
+        assert inference.rendered_prompt == "prompt"
+        assert hallucination.hallucination_type == "reasoning_too_short"
         assert artifact.artifact_type == "data_manifest"
+
+
+def test_research_logging_persists_prompt_baseline_and_stats():
+    with SessionLocal() as db:
+        experiment = research_repo.create_experiment(db, name="phase23", config={})
+        prompt = research_repo.upsert_prompt_template(
+            db,
+            version="ntb-v2",
+            template_text="template",
+            template_hash="hash",
+            metadata={"execution_mode": "paper_trading"},
+        )
+        baseline = research_repo.log_baseline_run(
+            db,
+            experiment_id=experiment.id,
+            model_run_id=None,
+            name="always_hold",
+            seed=42,
+            price_series=[100.0, 101.0],
+            metrics={"fee_drag_pct": 0.0},
+        )
+        stat = research_repo.log_statistical_test(
+            db,
+            experiment_id=experiment.id,
+            model_run_id=None,
+            test_name="wilcoxon",
+            left_label="a",
+            right_label="b",
+            statistic=1.0,
+            p_value=0.5,
+            effect_size=0.1,
+        )
+
+        assert prompt.version == "ntb-v2"
+        assert baseline.execution_mode == "paper_trading"
+        assert stat.p_value == 0.5
 
 
 def test_required_research_fields_are_populated():

@@ -136,6 +136,17 @@ class ModelRun(Base):
     )
 
 
+class PromptTemplate(Base):
+    __tablename__ = "prompt_templates"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    version = Column(String, nullable=False, unique=True, index=True)
+    template_text = Column(Text, nullable=False)
+    template_hash = Column(String, nullable=False)
+    created_at = Column(Integer, nullable=False)
+    metadata_json = Column(Text, nullable=False, default="{}")
+
+
 class InferenceLog(Base):
     __tablename__ = "inference_logs"
 
@@ -151,6 +162,8 @@ class InferenceLog(Base):
     hardware_tag = Column(String, nullable=False, default="")
     market_tick_id = Column(Integer, ForeignKey("market_ticks.id"), nullable=True, index=True)
     cycle_indicator_id = Column(Integer, ForeignKey("cycle_indicators.id"), nullable=True, index=True)
+    prompt_template_id = Column(Integer, ForeignKey("prompt_templates.id"), nullable=True, index=True)
+    rendered_prompt = Column(Text, nullable=False, default="")
     data_quality = Column(String, nullable=False, default="valid")
     raw_response = Column(Text, nullable=False)
     parsed_action = Column(String, nullable=False)
@@ -212,6 +225,23 @@ class RiskEvent(Base):
     model_run = relationship("ModelRun", back_populates="risk_events")
 
 
+class LLMHallucination(Base):
+    __tablename__ = "llm_hallucinations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    experiment_id = Column(Integer, ForeignKey("experiments.id"), nullable=True, index=True)
+    model_run_id = Column(Integer, ForeignKey("model_runs.id"), nullable=False, index=True)
+    inference_log_id = Column(Integer, ForeignKey("inference_logs.id"), nullable=True, index=True)
+    cycle_index = Column(Integer, nullable=False)
+    timestamp_utc = Column(Float, nullable=False)
+    model_name = Column(String, nullable=False)
+    raw_output = Column(Text, nullable=False)
+    hallucination_type = Column(String, nullable=False)
+    field_name = Column(String, nullable=False, default="")
+    field_value = Column(Text, nullable=False, default="")
+    corrective_action = Column(String, nullable=False, default="fallback_hold")
+
+
 class MarketTick(Base):
     __tablename__ = "market_ticks"
 
@@ -234,6 +264,36 @@ class MarketTick(Base):
     data_gap = Column(Boolean, nullable=False, default=False)
 
     model_run = relationship("ModelRun", back_populates="market_ticks")
+
+
+class BaselineRun(Base):
+    __tablename__ = "baseline_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    experiment_id = Column(Integer, ForeignKey("experiments.id"), nullable=True, index=True)
+    model_run_id = Column(Integer, ForeignKey("model_runs.id"), nullable=True, index=True)
+    name = Column(String, nullable=False)
+    seed = Column(Integer, nullable=True)
+    execution_mode = Column(String, nullable=False, default="paper_trading")
+    price_series_json = Column(Text, nullable=False, default="[]")
+    metrics_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(Integer, nullable=False)
+
+
+class StatisticalTest(Base):
+    __tablename__ = "statistical_tests"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    experiment_id = Column(Integer, ForeignKey("experiments.id"), nullable=True, index=True)
+    model_run_id = Column(Integer, ForeignKey("model_runs.id"), nullable=True, index=True)
+    test_name = Column(String, nullable=False)
+    left_label = Column(String, nullable=False)
+    right_label = Column(String, nullable=False)
+    statistic = Column(Float, nullable=False, default=0.0)
+    p_value = Column(Float, nullable=False, default=1.0)
+    effect_size = Column(Float, nullable=False, default=0.0)
+    metadata_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(Integer, nullable=False)
 
 
 class CycleIndicator(Base):

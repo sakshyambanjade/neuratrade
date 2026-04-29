@@ -28,6 +28,22 @@ def estimate_slippage_bps(
     return max(0.0, spread_cost + impact_cost + volatility_cost)
 
 
+def square_root_market_impact_bps(
+    *,
+    order_size_usd: float,
+    volatility: float,
+    average_daily_volume_usd: float,
+    impact_coefficient: float = 0.1,
+) -> float:
+    if order_size_usd < 0 or volatility < 0 or average_daily_volume_usd < 0 or impact_coefficient < 0:
+        raise ValueError("market impact inputs cannot be negative")
+    if order_size_usd == 0 or volatility == 0 or average_daily_volume_usd == 0:
+        return 0.0
+    participation_rate = order_size_usd / average_daily_volume_usd
+    impact_pct = volatility * impact_coefficient * (participation_rate**0.5)
+    return impact_pct * 10_000
+
+
 def calculate_slippage_bps(*, side: Side, reference_price: float, execution_price: float) -> float:
     if reference_price <= 0 or execution_price <= 0:
         raise ValueError("prices must be positive")

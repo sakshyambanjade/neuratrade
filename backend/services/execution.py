@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from services.fees import FeeModel, calculate_fee
 from services.latency import FixedLatencyModel, LatencyModel
 from services.order_book import OrderBookSnapshot, OrderType, Side
-from services.slippage import calculate_slippage_bps, estimate_slippage_bps
+from services.slippage import calculate_slippage_bps, estimate_slippage_bps, square_root_market_impact_bps
 
 OrderStatus = Literal["FILLED", "PARTIAL", "REJECTED"]
 MarketOrderStatus = Literal["FILLED", "REJECTED"]
@@ -38,6 +38,8 @@ class OrderRequest(BaseModel):
     volatility: float = Field(default=0.0, ge=0)
     fee_bps: float = Field(default=10.0, ge=0)
     latency_ms: int = Field(default=0, ge=0)
+    slippage_model: str = "simple"
+    average_daily_volume_usd: float = Field(default=0.0, ge=0)
 
     @field_validator("side", mode="before")
     @classmethod
@@ -158,6 +160,12 @@ class ExecutionSimulator:
             minute_volume=request.minute_volume,
             volatility=request.volatility,
         )
+        if request.slippage_model == "sqrt_impact":
+            slippage_bps = request.spread_bps / 2 + square_root_market_impact_bps(
+                order_size_usd=request.quantity * request.price,
+                volatility=request.volatility,
+                average_daily_volume_usd=request.average_daily_volume_usd,
+            )
         average_fill_price = self._apply_slippage(request.side, request.price, slippage_bps)
         gross_notional = request.quantity * average_fill_price
         fee = calculate_fee(gross_notional, request.fee_bps)

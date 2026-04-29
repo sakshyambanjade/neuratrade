@@ -18,9 +18,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from db import research_repo
 from db.database import SessionLocal, init_db
 from services.execution import ExecutionSimulator, OrderRequest
+from services.llm_quality import ActionDistributionMonitor, HallucinationEvent, validate_decision_payload
 from services.market_ws import BinanceMarketWebSocket, MarketSnapshot, TickValidator
 from services.metrics import cumulative_return, max_drawdown, profit_factor, sharpe_ratio, win_rate
 from services.ollama_client import OllamaClient, OllamaDecision, fallback_decision
+from services.prompting import PROMPT_TEMPLATE, PROMPT_VERSION, render_prompt, template_hash
 from services.risk_engine import RiskEngine, RiskInput
 
 
@@ -37,7 +39,7 @@ class LiveRunConfig(BaseModel):
     experiment_name: str = "live-dry-run"
     description: str = ""
     seed: int | None = None
-    prompt_version: str = "v1"
+    prompt_version: str = PROMPT_VERSION
     system_prompt_hash: str = ""
     temperature: float = Field(default=0.0, ge=0.0)
     ollama_model_tag: str = ""
@@ -45,6 +47,8 @@ class LiveRunConfig(BaseModel):
     fee_bps: float = Field(default=10.0, ge=0)
     minute_volume_default: float = Field(default=100.0, ge=0)
     volatility_default: float = Field(default=0.0, ge=0)
+    slippage_model: str = "sqrt_impact"
+    average_daily_volume_usd: float = Field(default=1_000_000_000.0, ge=0)
     tick_staleness_max_sec: float = Field(default=5.0, gt=0)
     max_spread_pct: float = Field(default=0.005, gt=0)
     data_gap_multiplier: float = Field(default=2.0, gt=0)
@@ -71,6 +75,7 @@ class LiveRunState(BaseModel):
     trade_pnls: list[float] = Field(default_factory=list)
     consecutive_losses: int = 0
     data_gap_cycles: int = 0
+    prompt_template_id: int | None = None
 
 
 class LiveExperimentRunner:
@@ -98,6 +103,7 @@ class LiveExperimentRunner:
             max_staleness_sec=config.tick_staleness_max_sec,
             data_gap_sec=max(config.tick_staleness_max_sec, config.cycle_interval_seconds * config.data_gap_multiplier),
         )
+        self.action_monitor = ActionDistributionMonitor()
         self.state = LiveRunState(cash=config.starting_balance, btc=config.starting_btc)
         self._stop_event = asyncio.Event()
         self._market_task: asyncio.Task | None = None
@@ -149,8 +155,11 @@ class LiveExperimentRunner:
             self.state.cycles_completed += 1
             return self.state
 
-        cycle_indicator_id = self._log_cycle_indicators(snapshot, market_tick_id=market_tick_id)
-        prompt = self._build_prompt(snapshot)
+        indicator_values = _cycle_indicator_values(snapshot)
+        cycle_indicator_id = self._log_cycle_indicators(
+            snapshot, market_tick_id=market_tick_id, indicators=indicator_values
+        )
+        prompt = self._build_prompt(snapshot, indicator_values)
         started = time.perf_counter()
         try:
             decision = self.ollama_client.decide(prompt, fallback_on_error=True)
@@ -162,7 +171,12 @@ class LiveExperimentRunner:
             error = str(exc)
         inference_latency_ms = int((time.perf_counter() - started) * 1000)
         decision_data = _decision_dict(decision)
-        self._log_inference(
+        hallucinations = validate_decision_payload(decision_data, current_price=price)
+        if self.action_monitor.observe(str(decision_data["action"])):
+            hallucinations.append(
+                HallucinationEvent("action_distribution_alert", "action", str(decision_data["action"]))
+            )
+        inference_log_id = self._log_inference(
             prompt,
             decision_data,
             inference_latency_ms,
@@ -172,6 +186,11 @@ class LiveExperimentRunner:
             cycle_indicator_id=cycle_indicator_id,
             data_quality=validation.status,
         )
+        self._log_hallucinations(
+            hallucinations, inference_log_id=inference_log_id, raw_output=json.dumps(decision_data)
+        )
+        if hallucinations:
+            decision_data = _decision_dict(fallback_decision("Hallucination detected; holding"))
 
         equity = self._equity(price)
         risk_decision = self.risk_engine.validate(
@@ -216,6 +235,8 @@ class LiveExperimentRunner:
                 minute_volume=max(snapshot.volume, self.config.minute_volume_default),
                 volatility=self.config.volatility_default,
                 fee_bps=self.config.fee_bps,
+                slippage_model=self.config.slippage_model,
+                average_daily_volume_usd=self.config.average_daily_volume_usd,
             )
         )
         self._log_execution(report, decision_price=price)
@@ -262,8 +283,16 @@ class LiveExperimentRunner:
                 ollama_model_tag=self.config.ollama_model_tag or self.config.model_name,
                 hardware_tag=self.config.hardware_tag,
             )
+            prompt_template = self.repo.upsert_prompt_template(
+                db,
+                version=self.config.prompt_version,
+                template_text=PROMPT_TEMPLATE,
+                template_hash=template_hash(PROMPT_TEMPLATE),
+                metadata={"execution_mode": "paper_trading"},
+            )
             self.state.experiment_id = experiment.id
             self.state.model_run_id = model_run.id
+            self.state.prompt_template_id = prompt_template.id
 
         self._with_db(create)
 
@@ -278,9 +307,9 @@ class LiveExperimentRunner:
         market_tick_id: int | None = None,
         cycle_indicator_id: int | None = None,
         data_quality: str = "valid",
-    ) -> None:
+    ) -> int | None:
         model_run_id = self._model_run_id()
-        self._with_db(
+        row = self._with_db(
             lambda db: self.repo.log_inference(
                 db,
                 model_run_id=model_run_id,
@@ -299,9 +328,12 @@ class LiveExperimentRunner:
                 hardware_tag=self.config.hardware_tag,
                 market_tick_id=market_tick_id,
                 cycle_indicator_id=cycle_indicator_id,
+                prompt_template_id=self.state.prompt_template_id,
+                rendered_prompt=prompt,
                 data_quality=data_quality,
             )
         )
+        return getattr(row, "id", None)
 
     def _log_market_tick(self, snapshot: MarketSnapshot, validation: Any) -> int | None:
         model_run_id = self._model_run_id()
@@ -330,9 +362,10 @@ class LiveExperimentRunner:
         row = self._with_db(log_tick)
         return getattr(row, "id", None)
 
-    def _log_cycle_indicators(self, snapshot: MarketSnapshot, *, market_tick_id: int | None) -> int | None:
+    def _log_cycle_indicators(
+        self, snapshot: MarketSnapshot, *, market_tick_id: int | None, indicators: dict[str, Any]
+    ) -> int | None:
         model_run_id = self._model_run_id()
-        indicators = _cycle_indicator_values(snapshot)
 
         def log_indicators(db: Any) -> Any:
             return self.repo.log_cycle_indicators(
@@ -347,6 +380,32 @@ class LiveExperimentRunner:
 
         row = self._with_db(log_indicators)
         return getattr(row, "id", None)
+
+    def _log_hallucinations(
+        self, events: list[HallucinationEvent], *, inference_log_id: int | None, raw_output: str
+    ) -> None:
+        if not events:
+            return
+        model_run_id = self._model_run_id()
+        for event in events:
+
+            def log_event(db: Any, hallucination: HallucinationEvent = event) -> Any:
+                return self.repo.log_llm_hallucination(
+                    db,
+                    experiment_id=self.state.experiment_id,
+                    model_run_id=model_run_id,
+                    inference_log_id=inference_log_id,
+                    cycle_index=self.state.cycles_completed,
+                    timestamp_utc=time.time(),
+                    model_name=self.config.model_name,
+                    raw_output=raw_output,
+                    hallucination_type=hallucination.hallucination_type,
+                    field_name=hallucination.field_name,
+                    field_value=hallucination.field_value,
+                    corrective_action=hallucination.corrective_action,
+                )
+
+            self._with_db(log_event)
 
     def _log_execution(self, report: Any, *, decision_price: float) -> None:
         model_run_id = self._model_run_id()
@@ -406,12 +465,32 @@ class LiveExperimentRunner:
             )
         )
 
-    def _build_prompt(self, snapshot: MarketSnapshot) -> str:
-        return (
-            f"Model {self.config.model_name} decide {self.config.symbol}. "
-            f"price={snapshot.last_price} bid={snapshot.bid} ask={snapshot.ask} "
-            f"spread_bps={snapshot.spread_bps:.4f} volume={snapshot.volume:.8f} "
-            f"cash={self.state.cash:.8f} btc={self.state.btc:.8f}."
+    def _build_prompt(self, snapshot: MarketSnapshot, indicators: dict[str, Any]) -> str:
+        return render_prompt(
+            market={
+                "symbol": snapshot.symbol,
+                "last_price": snapshot.last_price,
+                "bid": snapshot.bid,
+                "ask": snapshot.ask,
+                "spread_bps": snapshot.spread_bps,
+                "volume": snapshot.volume,
+                "top_bids": [level.model_dump() for level in snapshot.bids[:5]],
+                "top_asks": [level.model_dump() for level in snapshot.asks[:5]],
+                "closed_candles": [candle.model_dump() for candle in snapshot.candles[-15:]],
+            },
+            indicators=indicators,
+            portfolio={
+                "cash": self.state.cash,
+                "btc": self.state.btc,
+                "avg_entry_price": self.state.avg_entry_price,
+                "equity": self._equity(_snapshot_price(snapshot) or 0.0),
+            },
+            risk={
+                "dry_run": self.config.dry_run,
+                "execution_mode": "paper_trading",
+                "consecutive_losses": self.state.consecutive_losses,
+                "data_gap_cycles": self.state.data_gap_cycles,
+            },
         )
 
     def _equity(self, price: float) -> float:

@@ -55,6 +55,8 @@ class FakeRepo:
         self.risks = []
         self.market_ticks = []
         self.cycle_indicators = []
+        self.prompt_templates = []
+        self.hallucinations = []
         self.finished = []
         self.experiment_id = 1
         self.model_run_id = 2
@@ -64,6 +66,10 @@ class FakeRepo:
 
     def create_model_run(self, db, **kwargs):
         return type("ModelRun", (), {"id": self.model_run_id})()
+
+    def upsert_prompt_template(self, db, **kwargs):
+        self.prompt_templates.append(kwargs)
+        return type("PromptTemplate", (), {"id": len(self.prompt_templates)})()
 
     def log_inference(self, db, **kwargs):
         self.inferences.append(kwargs)
@@ -84,6 +90,9 @@ class FakeRepo:
     def log_cycle_indicators(self, db, **kwargs):
         self.cycle_indicators.append(kwargs)
         return type("CycleIndicator", (), {"id": len(self.cycle_indicators)})()
+
+    def log_llm_hallucination(self, db, **kwargs):
+        self.hallucinations.append(kwargs)
 
     def finish_model_run(self, db, **kwargs):
         self.finished.append(kwargs)
@@ -138,6 +147,8 @@ def test_one_cycle_completes():
     assert len(repo.metrics) == 1
     assert repo.inferences[0]["market_tick_id"] == 1
     assert repo.inferences[0]["cycle_indicator_id"] == 1
+    assert repo.inferences[0]["prompt_template_id"] == 1
+    assert "paper-trading" in repo.inferences[0]["rendered_prompt"]
     assert repo.inferences[0]["data_quality"] == "valid"
 
 
@@ -270,3 +281,26 @@ def test_stale_market_snapshot_is_logged_and_skipped():
     assert repo.market_ticks[0]["data_gap"] is True
     assert repo.inferences == []
     assert repo.metrics == []
+
+
+def test_semantic_hallucination_falls_back_to_hold():
+    repo = FakeRepo()
+    runner = _runner(
+        ollama_decision={
+            "action": "BUY",
+            "confidence": 1.8,
+            "position_size_pct": 2.0,
+            "reasoning": "too short",
+            "stop_loss": 110.0,
+            "take_profit": 90.0,
+        },
+        risk_decision=RiskDecision(
+            allowed=True, final_action="HOLD", final_size_pct=0.0, reason="hold", triggered_rules=[]
+        ),
+        repo=repo,
+    )
+
+    asyncio.run(runner.run_cycle())
+
+    assert repo.hallucinations
+    assert repo.fills == []

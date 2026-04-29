@@ -1,4 +1,4 @@
-from services.slippage import calculate_slippage_bps, estimate_slippage_bps
+from services.slippage import calculate_slippage_bps, estimate_slippage_bps, square_root_market_impact_bps
 
 
 def test_buy_slippage_bps_is_positive_when_execution_is_worse():
@@ -18,5 +18,12 @@ def test_estimated_slippage_handles_zero_volume_without_nan():
 def test_estimated_slippage_increases_with_participation():
     small = estimate_slippage_bps(spread_bps=8, order_size=1, minute_volume=100, volatility=0.01)
     large = estimate_slippage_bps(spread_bps=8, order_size=50, minute_volume=100, volatility=0.01)
+
+    assert large > small
+
+
+def test_square_root_market_impact_scales_with_order_size():
+    small = square_root_market_impact_bps(order_size_usd=10_000, volatility=0.01, average_daily_volume_usd=1_000_000)
+    large = square_root_market_impact_bps(order_size_usd=40_000, volatility=0.01, average_daily_volume_usd=1_000_000)
 
     assert large > small

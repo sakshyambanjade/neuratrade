@@ -11,6 +11,8 @@ import httpx
 from config import LLM_MODEL, LLM_TIMEOUT, OLLAMA_URL
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from services.llm_quality import extract_first_json_object
+
 Action = Literal["BUY", "SELL", "HOLD"]
 
 
@@ -125,8 +127,10 @@ def parse_ollama_decision(body: dict[str, Any]) -> OllamaDecision:
         data = raw_response
     elif isinstance(raw_response, str):
         try:
-            data = json.loads(raw_response)
+            data = extract_first_json_object(raw_response)
         except json.JSONDecodeError as exc:
+            raise OllamaDecisionError("Ollama response was not valid JSON") from exc
+        except ValueError as exc:
             raise OllamaDecisionError("Ollama response was not valid JSON") from exc
     else:
         raise OllamaDecisionError("Ollama response field missing or invalid")

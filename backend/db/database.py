@@ -48,6 +48,8 @@ def _ensure_research_metadata_columns():
             "hardware_tag": "VARCHAR DEFAULT '' NOT NULL",
             "market_tick_id": "INTEGER",
             "cycle_indicator_id": "INTEGER",
+            "prompt_template_id": "INTEGER",
+            "rendered_prompt": "TEXT DEFAULT '' NOT NULL",
             "data_quality": "VARCHAR DEFAULT 'valid' NOT NULL",
         },
         "metric_snapshots": {

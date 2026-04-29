@@ -91,6 +91,8 @@ def log_inference(
     hardware_tag: str = "",
     market_tick_id: int | None = None,
     cycle_indicator_id: int | None = None,
+    prompt_template_id: int | None = None,
+    rendered_prompt: str = "",
     data_quality: str = "valid",
 ) -> models.InferenceLog:
     row = models.InferenceLog(
@@ -105,6 +107,8 @@ def log_inference(
         hardware_tag=hardware_tag,
         market_tick_id=market_tick_id,
         cycle_indicator_id=cycle_indicator_id,
+        prompt_template_id=prompt_template_id,
+        rendered_prompt=rendered_prompt,
         data_quality=data_quality,
         raw_response=raw_response,
         parsed_action=parsed_action,
@@ -112,6 +116,67 @@ def log_inference(
         latency_ms=latency_ms,
         success=success,
         error=error,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def upsert_prompt_template(
+    db: Session,
+    *,
+    version: str,
+    template_text: str,
+    template_hash: str,
+    metadata: dict[str, Any] | None = None,
+) -> models.PromptTemplate:
+    row = db.query(models.PromptTemplate).filter(models.PromptTemplate.version == version).one_or_none()
+    if row is None:
+        row = models.PromptTemplate(
+            version=version,
+            template_text=template_text,
+            template_hash=template_hash,
+            created_at=_now(),
+            metadata_json=_json(metadata or {}),
+        )
+        db.add(row)
+    else:
+        row.template_text = template_text
+        row.template_hash = template_hash
+        row.metadata_json = _json(metadata or {})
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def log_llm_hallucination(
+    db: Session,
+    *,
+    experiment_id: int | None,
+    model_run_id: int,
+    inference_log_id: int | None,
+    cycle_index: int,
+    timestamp_utc: float,
+    model_name: str,
+    raw_output: str,
+    hallucination_type: str,
+    field_name: str = "",
+    field_value: str = "",
+    corrective_action: str = "fallback_hold",
+) -> models.LLMHallucination:
+    row = models.LLMHallucination(
+        experiment_id=experiment_id,
+        model_run_id=model_run_id,
+        inference_log_id=inference_log_id,
+        cycle_index=cycle_index,
+        timestamp_utc=timestamp_utc,
+        model_name=model_name,
+        raw_output=raw_output,
+        hallucination_type=hallucination_type,
+        field_name=field_name,
+        field_value=field_value,
+        corrective_action=corrective_action,
     )
     db.add(row)
     db.commit()
@@ -308,6 +373,64 @@ def log_experiment_artifact(
         path=path,
         sha256=sha256,
         metadata_json=_json(metadata or {}),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def log_baseline_run(
+    db: Session,
+    *,
+    experiment_id: int | None,
+    model_run_id: int | None,
+    name: str,
+    seed: int | None,
+    price_series: list[float],
+    metrics: dict[str, Any],
+    execution_mode: str = "paper_trading",
+) -> models.BaselineRun:
+    row = models.BaselineRun(
+        experiment_id=experiment_id,
+        model_run_id=model_run_id,
+        name=name,
+        seed=seed,
+        execution_mode=execution_mode,
+        price_series_json=_json(price_series),
+        metrics_json=_json(metrics),
+        created_at=_now(),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def log_statistical_test(
+    db: Session,
+    *,
+    experiment_id: int | None,
+    model_run_id: int | None,
+    test_name: str,
+    left_label: str,
+    right_label: str,
+    statistic: float,
+    p_value: float,
+    effect_size: float,
+    metadata: dict[str, Any] | None = None,
+) -> models.StatisticalTest:
+    row = models.StatisticalTest(
+        experiment_id=experiment_id,
+        model_run_id=model_run_id,
+        test_name=test_name,
+        left_label=left_label,
+        right_label=right_label,
+        statistic=statistic,
+        p_value=p_value,
+        effect_size=effect_size,
+        metadata_json=_json(metadata or {}),
+        created_at=_now(),
     )
     db.add(row)
     db.commit()
