@@ -52,6 +52,7 @@ class LiveRunConfig(BaseModel):
     tick_staleness_max_sec: float = Field(default=5.0, gt=0)
     max_spread_pct: float = Field(default=0.005, gt=0)
     data_gap_multiplier: float = Field(default=2.0, gt=0)
+    market_warmup_seconds: float = Field(default=15.0, ge=0)
 
     @field_validator("dry_run")
     @classmethod
@@ -115,6 +116,7 @@ class LiveExperimentRunner:
         self.state.running = True
         if hasattr(self.market_feed, "run"):
             self._market_task = asyncio.create_task(self.market_feed.run())
+            await self._wait_for_market_warmup()
 
         try:
             while not self._stop_event.is_set():
@@ -127,6 +129,14 @@ class LiveExperimentRunner:
         finally:
             await self.stop()
         return self.state
+
+    async def _wait_for_market_warmup(self) -> None:
+        deadline = time.monotonic() + self.config.market_warmup_seconds
+        while time.monotonic() < deadline:
+            snapshot = self.market_feed.get_snapshot()
+            if snapshot.heartbeat_ts is not None and _snapshot_price(snapshot) is not None:
+                return
+            await asyncio.sleep(0.25)
 
     async def stop(self) -> None:
         self._stop_event.set()

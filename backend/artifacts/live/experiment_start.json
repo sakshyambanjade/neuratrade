@@ -1,0 +1,43 @@
+{
+  "execution_mode": "paper_trading",
+  "started_at": 1777468579,
+  "config": {
+    "model_name": "qwen2.5:7b",
+    "symbol": "BTCUSDT",
+    "starting_balance": 10000.0,
+    "starting_btc": 0.0,
+    "cycle_interval_seconds": 60.0,
+    "max_cycles": 10,
+    "dry_run": true,
+    "experiment_name": "paper-trading-live",
+    "description": "",
+    "seed": null,
+    "prompt_version": "ntb-v2",
+    "system_prompt_hash": "",
+    "temperature": 0.0,
+    "ollama_model_tag": "",
+    "hardware_tag": "",
+    "fee_bps": 10.0,
+    "minute_volume_default": 100.0,
+    "volatility_default": 0.0,
+    "slippage_model": "sqrt_impact",
+    "average_daily_volume_usd": 1000000000.0,
+    "tick_staleness_max_sec": 5.0,
+    "max_spread_pct": 0.005,
+    "data_gap_multiplier": 2.0
+  },
+  "hardware": {
+    "platform": "macOS-15.5-arm64-arm-64bit",
+    "machine": "arm64",
+    "processor": "arm",
+    "python_version": "3.11.15",
+    "cpu": "Apple M4",
+    "ram_bytes": "17179869184",
+    "gpu": "Chipset Model: Apple M4"
+  },
+  "ollama": {
+    "version": "ollama version is 0.22.0",
+    "models": "NAME                       ID              SIZE      MODIFIED      \nqwen2.5:7b                 845dbda0ea48    4.7 GB    4 minutes ago    \nqwen3-coder:30b            06c1097efce0    18 GB     25 hours ago     \nqwen2.5-coder:14b          9ec8897f747e    9.0 GB    2 days ago       \nnomic-embed-text:latest    0a109f422b47    274 MB    11 days ago      \nqwen2.5-coder:7b           dae161e27b0e    4.7 GB    11 days ago"
+  },
+  "artifact_dir": "artifacts/live"
+}

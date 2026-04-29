@@ -7,7 +7,11 @@ ARTIFACT_DIR="${ARTIFACT_DIR:-$ROOT_DIR/artifacts/live}"
 MAX_CYCLES="${MAX_CYCLES:-10}"
 CYCLE_INTERVAL_SECONDS="${CYCLE_INTERVAL_SECONDS:-60}"
 DB_PATH="${DB_PATH:-$ROOT_DIR/backend/trading.db}"
-PYTHON_BIN="${PYTHON_BIN:-python3}"
+if [[ -z "${PYTHON_BIN:-}" && -x "$ROOT_DIR/backend/.venv/bin/python" ]]; then
+  PYTHON_BIN="$ROOT_DIR/backend/.venv/bin/python"
+else
+  PYTHON_BIN="${PYTHON_BIN:-python3}"
+fi
 
 if [[ -f "$ROOT_DIR/.env" ]]; then
   set -a
@@ -27,6 +31,11 @@ if [[ "${DRY_RUN:-true}" != "true" ]]; then
   echo "Refusing to start: DRY_RUN must remain true for paper-trading research." >&2
   exit 1
 fi
+
+case "$ARTIFACT_DIR" in
+  /*) ;;
+  *) ARTIFACT_DIR="$ROOT_DIR/$ARTIFACT_DIR" ;;
+esac
 
 if ! command -v ollama >/dev/null 2>&1; then
   echo "Ollama is not installed or not on PATH." >&2
