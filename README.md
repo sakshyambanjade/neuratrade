@@ -74,6 +74,12 @@ npm run dev
 
 Live experiments consume BTC market data, ask a local Ollama model for JSON decisions, pass the decision through risk gates, and simulate fills only. They do not place exchange orders.
 
+Before a research run, pre-fill recent Binance candles so indicators have real history from the first live cycle:
+
+```bash
+make prefill
+```
+
 From the repository root:
 
 ```bash

@@ -55,6 +55,12 @@ Important guardrails:
 
 ## 3. Start The Experiment
 
+Pre-fill the last 7 days of Binance BTCUSDT 1-minute candles before the live loop:
+
+```bash
+make prefill
+```
+
 From the repo root:
 
 ```bash

@@ -31,7 +31,7 @@ SQLITE_BUSY_TIMEOUT_MS = int(os.getenv("SQLITE_BUSY_TIMEOUT_MS", 5000))
 
 # Market
 SYMBOL = os.getenv("SYMBOL", "BTCUSDT")
-TICK_INTERVAL_SECONDS = int(os.getenv("TICK_INTERVAL_SECONDS", 300))  # 5 min
+TICK_INTERVAL_SECONDS = int(os.getenv("TICK_INTERVAL_SECONDS", 60))  # 1 min
 BINANCE_BASE = "https://api.binance.com"
 COINGECKO_BASE = "https://api.coingecko.com/api/v3"
 
