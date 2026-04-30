@@ -17,7 +17,7 @@ prefill:
 run-v1:
 	cd backend && "$(PYTHON)" run_v1_experiment.py
 
-v1-autopilot:
+v1-autopilot: prefill
 	cd backend && "$(PYTHON)" run_v1_experiment.py --all-models --auto-resume
 
 run-90d:
