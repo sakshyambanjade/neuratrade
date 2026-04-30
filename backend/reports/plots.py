@@ -68,6 +68,107 @@ def plot_ablation_results(ablation_csv: str | Path, output_png: str | Path) -> N
     )
 
 
+def plot_equity_curves(equity_csv: str | Path, output_png: str | Path) -> None:
+    rows = _read_csv(equity_csv, required=["model", "step", "equity"])
+    series: dict[str, list[tuple[int, float]]] = {}
+    for row in rows:
+        try:
+            step = int(float(row["step"]))
+            equity = float(row["equity"])
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(equity):
+            series.setdefault(row["model"], []).append((step, equity))
+
+    output_png = Path(output_png)
+    output_png.parent.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(9, 5))
+    if series:
+        for label, values in sorted(series.items()):
+            values = sorted(values)
+            ax.plot([step for step, _ in values], [equity for _, equity in values], linewidth=1.8, label=label)
+        ax.legend(fontsize=8)
+    else:
+        ax.text(0.5, 0.5, "No equity data", ha="center", va="center", transform=ax.transAxes)
+    ax.set_title("Equity Curves")
+    ax.set_xlabel("Decision Step")
+    ax.set_ylabel("Simulated Equity")
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(output_png, dpi=300)
+    plt.close(fig)
+
+
+def plot_confidence_return_scatter(confidence_csv: str | Path, output_png: str | Path) -> None:
+    rows = _read_csv(confidence_csv, required=["model", "confidence", "realized_return"])
+    output_png = Path(output_png)
+    output_png.parent.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(7.5, 5))
+    plotted = False
+    for model in sorted({row["model"] for row in rows}):
+        model_rows = [row for row in rows if row["model"] == model]
+        confidences = _numbers(model_rows, "confidence")
+        returns = _numbers(model_rows, "realized_return")
+        if confidences and returns:
+            ax.scatter(confidences, returns, s=10, alpha=0.45, label=model)
+            plotted = True
+    if plotted:
+        ax.legend(fontsize=8)
+    else:
+        ax.text(0.5, 0.5, "No confidence data", ha="center", va="center", transform=ax.transAxes)
+    ax.axhline(0, color="#555555", linewidth=0.8)
+    ax.set_title("Confidence vs. Realized Return")
+    ax.set_xlabel("Model Confidence")
+    ax.set_ylabel("Next-period Signed Return")
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(output_png, dpi=300)
+    plt.close(fig)
+
+
+def plot_parameter_vs_sharpe(
+    results_csv: str | Path,
+    output_png: str | Path,
+    model_parameters_b: dict[str, float],
+) -> None:
+    rows = _read_csv(results_csv, required=["model", "sharpe"])
+    points = [
+        (model_parameters_b[row["model"]], _numbers([row], "sharpe")[0], row["model"])
+        for row in rows
+        if row["model"] in model_parameters_b
+    ]
+    output_png = Path(output_png)
+    output_png.parent.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(7.5, 5))
+    if points:
+        ax.scatter([point[0] for point in points], [point[1] for point in points], s=50)
+        for params, sharpe, label in points:
+            ax.annotate(label, (params, sharpe), fontsize=8, xytext=(4, 4), textcoords="offset points")
+    else:
+        ax.text(0.5, 0.5, "No parameter metadata", ha="center", va="center", transform=ax.transAxes)
+    ax.set_title("Parameter Count vs. Sharpe")
+    ax.set_xlabel("Parameters (B)")
+    ax.set_ylabel("Sharpe")
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(output_png, dpi=300)
+    plt.close(fig)
+
+
+def plot_regime_breakdown(regime_csv: str | Path, output_png: str | Path) -> None:
+    rows = _read_csv(regime_csv, required=["regime", "model", "sharpe"])
+    labels = [f"{row['regime']}:{row['model']}" for row in rows]
+    values = _numbers(rows, "sharpe")
+    _bar_plot(
+        output_png,
+        title="Sharpe by Market Regime",
+        ylabel="Sharpe",
+        labels=labels,
+        values=values,
+        empty_label="No regime data",
+    )
+
+
 def _read_csv(path: str | Path, *, required: list[str]) -> list[dict[str, str]]:
     path = Path(path)
     with path.open(newline="", encoding="utf-8") as handle:

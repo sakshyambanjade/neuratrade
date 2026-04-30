@@ -11,6 +11,7 @@ Run from backend/:
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
 import sys
@@ -24,15 +25,40 @@ if str(BACKEND_DIR) not in sys.path:
 from db import models  # noqa: E402
 from db.database import SessionLocal, init_db  # noqa: E402
 from experiments.ablation import AblationConfig, run_ablation  # noqa: E402
-from experiments.baselines import BaselineConfig, run_baselines  # noqa: E402
+from experiments.baselines import BaselineConfig, baseline_decisions, run_baselines  # noqa: E402
 from experiments.compare_models import ModelComparisonConfig, compare_models  # noqa: E402
+from experiments.runner import ExperimentConfig, run_mock_experiment  # noqa: E402
 from reports.generate_report import generate_markdown_report  # noqa: E402
-from reports.plots import plot_ablation_results, plot_model_comparison  # noqa: E402
+from reports.plots import (  # noqa: E402
+    plot_ablation_results,
+    plot_confidence_return_scatter,
+    plot_equity_curves,
+    plot_model_comparison,
+    plot_parameter_vs_sharpe,
+    plot_regime_breakdown,
+)
 from services.ollama_client import OllamaClient  # noqa: E402
 
 OUTPUT_DIR = Path("../artifacts/90d_real")
 CHECKPOINT_DIR = OUTPUT_DIR / "checkpoints"
-MODELS = ["qwen2.5:7b", "llama3.1:8b", "gemma2:2b"]
+MODELS = [
+    "qwen2.5:7b",
+    "llama3.1:8b",
+    "gemma2:2b",
+    "mistral:7b",
+    "phi3:mini",
+    "tinyllama:1.1b",
+    "llama3.2:3b",
+]
+MODEL_PARAMETERS_B = {
+    "qwen2.5:7b": 7.0,
+    "llama3.1:8b": 8.0,
+    "gemma2:2b": 2.0,
+    "mistral:7b": 7.0,
+    "phi3:mini": 3.8,
+    "tinyllama:1.1b": 1.1,
+    "llama3.2:3b": 3.0,
+}
 SEED = 42
 TARGET_POINTS = 129_600
 ABLATION_POINTS = 10_080
@@ -85,7 +111,7 @@ def collect_model_decisions(*, model: str, prices: list[float]) -> list[dict[str
     print(f"{model}: resuming at decision {start_index + 1}/{len(prices)}.")
     client = OllamaClient(model=model)
     for index in range(start_index, len(prices)):
-        decision = client.decide(_decision_prompt(index=index, price=prices[index]), fallback_on_error=True)
+        decision = client.decide(_decision_prompt(index=index, price=prices[index]), fallback_on_error=False)
         decision_data = decision.model_dump()
         append_checkpoint_decision(
             checkpoint_path,
@@ -144,6 +170,59 @@ def run_baseline_comparison(prices: list[float]) -> None:
     print(f"Baselines: {', '.join(summary)}")
 
 
+def export_paper_figure_data(prices: list[float], *, model_names: list[str]) -> None:
+    print("\n--- Exporting paper figure data ---")
+    equity_rows: list[dict[str, Any]] = []
+    confidence_rows: list[dict[str, Any]] = []
+    regime_rows: list[dict[str, Any]] = []
+
+    for model in model_names:
+        decisions = load_checkpointed_decisions(decision_checkpoint_path(model), expected_prices=prices)
+        if len(decisions) < len(prices):
+            raise RuntimeError(f"{model} checkpoint is incomplete; cannot export paper figures.")
+        result = run_mock_experiment(
+            ExperimentConfig(
+                name=model,
+                prices=prices,
+                mocked_decisions=decisions,
+                periods_per_year=PERIODS_PER_YEAR,
+            )
+        )
+        equity_rows.extend(_equity_rows(model, result.equity_series))
+        confidence_rows.extend(_confidence_rows(model, prices, decisions))
+        regime_rows.extend(_regime_rows(model, prices, decisions))
+
+    ema_baseline = run_baselines(
+        BaselineConfig(
+            prices=prices,
+            baseline_names=["ema_crossover"],
+            seed=SEED,
+            periods_per_year=PERIODS_PER_YEAR,
+        )
+    )[0]
+    equity_rows.extend(_equity_rows("baseline:ema_crossover", ema_baseline.result.equity_series))
+    regime_rows.extend(_regime_rows("baseline:ema_crossover", prices, _ema_baseline_decisions(prices)))
+
+    _write_csv(OUTPUT_DIR / "equity_curves.csv", ["model", "step", "equity"], equity_rows)
+    _write_csv(
+        OUTPUT_DIR / "confidence_return.csv",
+        ["model", "step", "action", "confidence", "realized_return"],
+        confidence_rows,
+    )
+    _write_csv(
+        OUTPUT_DIR / "regime_breakdown.csv", ["regime", "model", "return", "sharpe", "max_drawdown"], regime_rows
+    )
+    _write_csv(
+        OUTPUT_DIR / "model_parameters.csv",
+        ["model", "parameters_b"],
+        [
+            {"model": model, "parameters_b": MODEL_PARAMETERS_B[model]}
+            for model in model_names
+            if model in MODEL_PARAMETERS_B
+        ],
+    )
+
+
 def generate_report() -> None:
     print("\n--- Generating research report ---")
     output_path = OUTPUT_DIR / "report.md"
@@ -158,6 +237,17 @@ def generate_charts() -> None:
         plot_model_comparison(model_csv, OUTPUT_DIR / "model_sharpe.png")
     if ablation_csv.exists():
         plot_ablation_results(ablation_csv, OUTPUT_DIR / "ablation_sharpe.png")
+    equity_csv = OUTPUT_DIR / "equity_curves.csv"
+    confidence_csv = OUTPUT_DIR / "confidence_return.csv"
+    regime_csv = OUTPUT_DIR / "regime_breakdown.csv"
+    if equity_csv.exists():
+        plot_equity_curves(equity_csv, OUTPUT_DIR / "equity_curves.png")
+    if confidence_csv.exists():
+        plot_confidence_return_scatter(confidence_csv, OUTPUT_DIR / "confidence_return.png")
+    if regime_csv.exists():
+        plot_regime_breakdown(regime_csv, OUTPUT_DIR / "regime_breakdown.png")
+    if model_csv.exists():
+        plot_parameter_vs_sharpe(model_csv, OUTPUT_DIR / "parameter_vs_sharpe.png", MODEL_PARAMETERS_B)
 
 
 def load_checkpointed_decisions(path: Path, *, expected_prices: list[float]) -> list[dict[str, Any]]:
@@ -219,6 +309,7 @@ def main() -> None:
     run_model_comparison(prices, model_names=args.models)
     run_ablation_study(prices, model_names=args.models)
     run_baseline_comparison(prices)
+    export_paper_figure_data(prices, model_names=args.models)
     generate_charts()
     generate_report()
 
@@ -233,6 +324,88 @@ def _decision_prompt(*, index: int, price: float) -> str:
         f"tick={index} price={price:.2f}. "
         "Fields: action, confidence, position_size_pct, reasoning, stop_loss, take_profit."
     )
+
+
+def _equity_rows(model: str, equity_series: list[float]) -> list[dict[str, Any]]:
+    return [{"model": model, "step": index, "equity": equity} for index, equity in enumerate(equity_series)]
+
+
+def _confidence_rows(model: str, prices: list[float], decisions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows = []
+    for index, (current, next_price) in enumerate(zip(prices, prices[1:], strict=False)):
+        decision = decisions[index]
+        action = str(decision.get("action", "HOLD")).upper()
+        raw_return = next_price / current - 1 if current > 0 else 0.0
+        signed_return = raw_return if action == "BUY" else -raw_return if action == "SELL" else 0.0
+        rows.append(
+            {
+                "model": model,
+                "step": index,
+                "action": action,
+                "confidence": float(decision.get("confidence", 0.0)),
+                "realized_return": signed_return,
+            }
+        )
+    return rows
+
+
+def _regime_rows(model: str, prices: list[float], decisions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows = []
+    for regime, start, end in _regime_segments(prices):
+        segment_prices = prices[start:end]
+        if len(segment_prices) < 2:
+            continue
+        segment_decisions = decisions[start:end]
+        result = run_mock_experiment(
+            ExperimentConfig(
+                name=f"{model}:{regime}",
+                prices=segment_prices,
+                mocked_decisions=segment_decisions,
+                periods_per_year=PERIODS_PER_YEAR,
+            )
+        )
+        rows.append(
+            {
+                "regime": regime,
+                "model": model,
+                "return": result.cumulative_return,
+                "sharpe": result.sharpe,
+                "max_drawdown": result.max_drawdown,
+            }
+        )
+    return rows
+
+
+def _regime_segments(prices: list[float]) -> list[tuple[str, int, int]]:
+    if len(prices) < 3:
+        return [("full", 0, len(prices))]
+    segment_size = len(prices) // 3
+    raw_segments = [
+        (0, segment_size),
+        (segment_size, segment_size * 2),
+        (segment_size * 2, len(prices)),
+    ]
+    scored = []
+    for start, end in raw_segments:
+        segment = prices[start:end]
+        segment_return = segment[-1] / segment[0] - 1 if len(segment) > 1 and segment[0] > 0 else 0.0
+        scored.append((segment_return, start, end))
+    labels = ["bear", "sideways", "bull"]
+    ordered = sorted(scored, key=lambda row: row[0])
+    label_by_range = {(start, end): labels[index] for index, (_, start, end) in enumerate(ordered)}
+    return [(label_by_range[(start, end)], start, end) for start, end in raw_segments]
+
+
+def _ema_baseline_decisions(prices: list[float]) -> list[dict[str, Any]]:
+    return [dict(row) for row in baseline_decisions(prices, "ema_crossover", seed=SEED)]
+
+
+def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def _count_minute_gaps(timestamps: list[int]) -> int:

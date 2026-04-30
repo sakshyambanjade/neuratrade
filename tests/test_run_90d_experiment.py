@@ -1,6 +1,9 @@
 import json
 
 from scripts.run_90d_experiment import (
+    MODELS,
+    _confidence_rows,
+    _regime_segments,
     append_checkpoint_decision,
     decision_checkpoint_path,
     load_checkpointed_decisions,
@@ -49,3 +52,24 @@ def test_checkpoint_file_is_jsonl(tmp_path):
     row = json.loads(path.read_text(encoding="utf-8"))
     assert row["index"] == 0
     assert row["decision"]["action"] == "HOLD"
+
+
+def test_default_model_lineup_covers_parameter_range():
+    assert len(MODELS) == 7
+    assert "tinyllama:1.1b" in MODELS
+    assert "llama3.1:8b" in MODELS
+
+
+def test_confidence_rows_use_action_signed_next_return():
+    rows = _confidence_rows("alpha", [100.0, 110.0, 99.0], [_decision("BUY"), _decision("SELL")])
+
+    assert rows[0]["realized_return"] > 0
+    assert rows[1]["realized_return"] > 0
+
+
+def test_regime_segments_cover_full_window():
+    segments = _regime_segments([100, 110, 120, 119, 118, 117, 117, 117, 118])
+
+    assert segments[0][1] == 0
+    assert segments[-1][2] == 9
+    assert {segment[0] for segment in segments} == {"bull", "bear", "sideways"}

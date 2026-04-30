@@ -11,7 +11,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from experiments.runner import ExperimentConfig, ExperimentResult, run_mock_experiment
 
-BaselineName = Literal["random", "buy_and_hold", "ema_crossover", "always_hold"]
+BaselineName = Literal[
+    "random",
+    "buy_and_hold",
+    "ema_crossover",
+    "rsi_mean_reversion",
+    "macd_crossover",
+    "hindsight_oracle",
+    "always_hold",
+]
 
 
 class BaselineConfig(BaseModel):
@@ -19,7 +27,15 @@ class BaselineConfig(BaseModel):
 
     prices: list[float]
     baseline_names: list[BaselineName] = Field(
-        default_factory=lambda: ["random", "buy_and_hold", "ema_crossover", "always_hold"]
+        default_factory=lambda: [
+            "random",
+            "buy_and_hold",
+            "ema_crossover",
+            "rsi_mean_reversion",
+            "macd_crossover",
+            "hindsight_oracle",
+            "always_hold",
+        ]
     )
     seed: int = 42
     initial_cash: float = Field(default=10_000.0, gt=0)
@@ -55,6 +71,10 @@ def run_baselines(config: BaselineConfig) -> list[BaselineResult]:
     return rows
 
 
+def baseline_decisions(prices: list[float], name: BaselineName, *, seed: int = 42) -> list[dict[str, float | str]]:
+    return _decisions(prices, name, seed=seed)
+
+
 def _run_one(config: BaselineConfig, name: BaselineName) -> ExperimentResult:
     decisions = _decisions(config.prices, name, seed=config.seed)
     return run_mock_experiment(
@@ -82,7 +102,13 @@ def _decisions(prices: list[float], name: BaselineName, *, seed: int) -> list[di
     if name == "random":
         rng = random.Random(seed)
         return [_decision(rng.choice(["BUY", "SELL", "HOLD"]), 0.25) for _ in prices]
-    return _ema_crossover(prices)
+    if name == "ema_crossover":
+        return _ema_crossover(prices)
+    if name == "rsi_mean_reversion":
+        return _rsi_mean_reversion(prices)
+    if name == "macd_crossover":
+        return _macd_crossover(prices)
+    return _hindsight_oracle(prices)
 
 
 def _ema_crossover(prices: list[float]) -> list[dict[str, float | str]]:
@@ -105,6 +131,73 @@ def _ema_crossover(prices: list[float]) -> list[dict[str, float | str]]:
         previous_fast = fast
         previous_slow = slow
     return decisions
+
+
+def _rsi_mean_reversion(prices: list[float], period: int = 14) -> list[dict[str, float | str]]:
+    decisions = []
+    for index in range(len(prices)):
+        rsi = _rsi(prices[: index + 1], period)
+        if rsi < 30:
+            decisions.append(_decision("BUY", 0.25))
+        elif rsi > 70:
+            decisions.append(_decision("SELL", 1.0))
+        else:
+            decisions.append(_decision("HOLD", 0.0))
+    return decisions
+
+
+def _macd_crossover(prices: list[float]) -> list[dict[str, float | str]]:
+    decisions = []
+    previous_macd = None
+    previous_signal = None
+    macd_values: list[float] = []
+    for index in range(len(prices)):
+        segment = prices[: index + 1]
+        macd = _ema(segment, 12) - _ema(segment, 26)
+        macd_values.append(macd)
+        signal = _ema(macd_values, 9)
+        action = "HOLD"
+        size = 0.0
+        if previous_macd is not None and previous_signal is not None:
+            if previous_macd <= previous_signal and macd > signal:
+                action = "BUY"
+                size = 0.25
+            elif previous_macd >= previous_signal and macd < signal:
+                action = "SELL"
+                size = 1.0
+        decisions.append(_decision(action, size))
+        previous_macd = macd
+        previous_signal = signal
+    return decisions
+
+
+def _hindsight_oracle(prices: list[float]) -> list[dict[str, float | str]]:
+    decisions = []
+    for current, next_price in zip(prices, prices[1:], strict=False):
+        if next_price > current:
+            decisions.append(_decision("BUY", 0.95))
+        elif next_price < current:
+            decisions.append(_decision("SELL", 1.0))
+        else:
+            decisions.append(_decision("HOLD", 0.0))
+    if prices:
+        decisions.append(_decision("SELL", 1.0))
+    return decisions
+
+
+def _rsi(values: list[float], period: int) -> float:
+    if len(values) <= period:
+        return 50.0
+    deltas = [current - previous for previous, current in zip(values, values[1:], strict=False)]
+    recent = deltas[-period:]
+    gains = [delta for delta in recent if delta > 0]
+    losses = [-delta for delta in recent if delta < 0]
+    average_gain = sum(gains) / period
+    average_loss = sum(losses) / period
+    if average_loss <= 0:
+        return 100.0 if average_gain > 0 else 50.0
+    relative_strength = average_gain / average_loss
+    return 100 - (100 / (1 + relative_strength))
 
 
 def _ema(values: list[float], period: int) -> float:

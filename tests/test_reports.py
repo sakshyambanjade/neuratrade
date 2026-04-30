@@ -5,9 +5,13 @@ import pytest
 from reports.generate_report import generate_markdown_report
 from reports.plots import (
     plot_ablation_results,
+    plot_confidence_return_scatter,
     plot_drawdown_curve,
     plot_equity_curve,
+    plot_equity_curves,
     plot_model_comparison,
+    plot_parameter_vs_sharpe,
+    plot_regime_breakdown,
 )
 
 
@@ -120,11 +124,33 @@ def test_png_files_are_created(tmp_path):
         tmp_path / "drawdown.png",
         tmp_path / "models.png",
         tmp_path / "ablation.png",
+        tmp_path / "multi_equity.png",
+        tmp_path / "confidence.png",
+        tmp_path / "params.png",
+        tmp_path / "regimes.png",
     ]
     plot_equity_curve(equity_csv, outputs[0])
     plot_drawdown_curve(equity_csv, outputs[1])
     plot_model_comparison(comparison_csv, outputs[2])
     plot_ablation_results(ablation_csv, outputs[3])
+    multi_equity_csv = tmp_path / "multi_equity.csv"
+    confidence_csv = tmp_path / "confidence.csv"
+    regime_csv = tmp_path / "regime.csv"
+    _write_csv(
+        multi_equity_csv,
+        ["model", "step", "equity"],
+        [{"model": "alpha", "step": 0, "equity": 100}, {"model": "alpha", "step": 1, "equity": 101}],
+    )
+    _write_csv(
+        confidence_csv,
+        ["model", "confidence", "realized_return"],
+        [{"model": "alpha", "confidence": 0.7, "realized_return": 0.01}],
+    )
+    _write_csv(regime_csv, ["regime", "model", "sharpe"], [{"regime": "bull", "model": "alpha", "sharpe": 1.1}])
+    plot_equity_curves(multi_equity_csv, outputs[4])
+    plot_confidence_return_scatter(confidence_csv, outputs[5])
+    plot_parameter_vs_sharpe(comparison_csv, outputs[6], {"alpha": 1.0})
+    plot_regime_breakdown(regime_csv, outputs[7])
 
     assert all(path.exists() and path.stat().st_size > 0 for path in outputs)
 

@@ -253,4 +253,5 @@ NeuraTradeBench is a simulator and paper-trading research system only. It is not
 - [Metrics](docs/metrics.md)
 - [Safety And Limits](docs/safety_and_limits.md)
 - [Reproducibility](docs/reproducibility.md)
+- [Prompt Template Appendix](docs/prompt_template.md)
 - [Citation](CITATION.bib)
