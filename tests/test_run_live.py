@@ -58,8 +58,10 @@ class FakeRepo:
         self.prompt_templates = []
         self.hallucinations = []
         self.finished = []
+        self.resumed = []
         self.experiment_id = 1
         self.model_run_id = 2
+        self.resume_payload = None
 
     def create_experiment(self, db, **kwargs):
         return type("Experiment", (), {"id": self.experiment_id})()
@@ -96,6 +98,21 @@ class FakeRepo:
 
     def finish_model_run(self, db, **kwargs):
         self.finished.append(kwargs)
+
+    def mark_model_run_running(self, db, **kwargs):
+        self.resumed.append(kwargs)
+
+    def load_live_run_resume_state(self, db, **kwargs):
+        return self.resume_payload or {
+            "experiment_id": self.experiment_id,
+            "model_run_id": kwargs["model_run_id"],
+            "model_name": "mock",
+            "config": {"starting_balance": 10_000.0, "starting_btc": 0.0},
+            "next_cycle_index": 0,
+            "data_gap_cycles": 0,
+            "equity_series": [],
+            "fills": [],
+        }
 
 
 def _session_factory():
@@ -304,3 +321,43 @@ def test_semantic_hallucination_falls_back_to_hold():
 
     assert repo.hallucinations
     assert repo.fills == []
+
+
+def test_resume_model_run_restores_state_and_cycle_index():
+    repo = FakeRepo()
+    repo.resume_payload = {
+        "experiment_id": 9,
+        "model_run_id": 7,
+        "model_name": "mock",
+        "config": {"starting_balance": 1_000.0, "starting_btc": 0.0},
+        "next_cycle_index": 212,
+        "data_gap_cycles": 3,
+        "equity_series": [1_000.0, 1_010.0],
+        "fills": [
+            {"side": "BUY", "filled_qty": 1.0, "fill_price": 100.0, "fee": 1.0, "realized_pnl": 0.0},
+            {"side": "SELL", "filled_qty": 0.5, "fill_price": 120.0, "fee": 1.0, "realized_pnl": 9.0},
+        ],
+    }
+    runner = LiveExperimentRunner(
+        LiveRunConfig(model_name="mock", cycle_interval_seconds=0, resume_model_run_id=7),
+        market_feed=FakeMarket(),
+        ollama_client=FakeOllama(_decision(action="HOLD", size=0.0)),
+        risk_engine=FakeRisk(
+            RiskDecision(allowed=True, final_action="HOLD", final_size_pct=0.0, reason="hold", triggered_rules=[])
+        ),
+        execution_simulator=ExecutionSimulator(),
+        session_factory=_session_factory,
+        repo=repo,
+    )
+
+    asyncio.run(runner.run_cycle())
+
+    assert repo.resumed == [{"model_run_id": 7}]
+    assert repo.market_ticks[0]["model_run_id"] == 7
+    assert repo.market_ticks[0]["experiment_id"] == 9
+    assert repo.market_ticks[0]["cycle_index"] == 212
+    assert runner.state.cycles_completed == 213
+    assert runner.state.cash == 958.0
+    assert runner.state.btc == 0.5
+    assert runner.state.avg_entry_price == 100.0
+    assert runner.state.data_gap_cycles == 3

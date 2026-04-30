@@ -261,3 +261,67 @@ def test_required_research_fields_are_populated():
         assert model_run.temperature == 0.0
         assert model_run.ollama_model_tag == "alpha"
         assert model_run.hardware_tag == ""
+
+
+def test_resume_state_loader_and_running_marker():
+    with SessionLocal() as db:
+        experiment = research_repo.create_experiment(
+            db,
+            name="resume",
+            config={"starting_balance": 1_000.0, "starting_btc": 0.0},
+        )
+        model_run = research_repo.create_model_run(db, experiment_id=experiment.id, model_name="alpha")
+        research_repo.log_market_tick(
+            db,
+            model_run_id=model_run.id,
+            experiment_id=experiment.id,
+            cycle_index=211,
+            timestamp_utc=123.0,
+            received_at=124.0,
+            symbol="BTCUSDT",
+            bid=99.0,
+            ask=101.0,
+            last_price=100.0,
+            volume_24h=10.0,
+            spread_bps=200.0,
+            source="binance_ws",
+            raw_json={},
+            validation_status="valid",
+        )
+        research_repo.log_execution_fill(
+            db,
+            model_run_id=model_run.id,
+            side="BUY",
+            requested_qty=1.0,
+            filled_qty=1.0,
+            decision_price=100.0,
+            fill_price=101.0,
+            fee=1.0,
+            slippage_bps=10.0,
+            latency_ms=3,
+            realized_pnl=0.0,
+        )
+        research_repo.log_metric_snapshot(
+            db,
+            model_run_id=model_run.id,
+            equity=999.0,
+            cumulative_return=-0.001,
+            sharpe=0.0,
+            max_drawdown=0.001,
+            win_rate=0.0,
+            profit_factor=0.0,
+        )
+        finished = research_repo.finish_model_run(db, model_run_id=model_run.id)
+        finished_status = finished.status
+
+        state = research_repo.load_live_run_resume_state(db, model_run_id=model_run.id)
+        running = research_repo.mark_model_run_running(db, model_run_id=model_run.id)
+
+        assert finished_status == "completed"
+        assert state["model_name"] == "alpha"
+        assert state["config"]["starting_balance"] == 1_000.0
+        assert state["next_cycle_index"] == 212
+        assert state["equity_series"] == [999.0]
+        assert state["fills"][0]["filled_qty"] == 1.0
+        assert running.status == "running"
+        assert running.ended_at is None

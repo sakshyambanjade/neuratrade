@@ -4,7 +4,7 @@ SYMBOL ?= BTCUSDT
 INTERVAL ?= 1m
 TARGET_POINTS ?= 129600
 
-.PHONY: paper-demo reproduce prefill run-v1 run-90d v1-compare v1-confidence v1-regime report test lint run
+.PHONY: paper-demo reproduce prefill run-v1 v1-autopilot run-90d v1-compare v1-confidence v1-regime report test lint run
 
 paper-demo:
 	scripts/paper_demo.sh
@@ -16,6 +16,9 @@ prefill:
 
 run-v1:
 	cd backend && "$(PYTHON)" run_v1_experiment.py
+
+v1-autopilot:
+	cd backend && "$(PYTHON)" run_v1_experiment.py --all-models --auto-resume
 
 run-90d:
 	cd backend && "$(PYTHON)" scripts/run_90d_experiment.py --max-points "$(TARGET_POINTS)"

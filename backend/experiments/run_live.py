@@ -53,6 +53,7 @@ class LiveRunConfig(BaseModel):
     max_spread_pct: float = Field(default=0.005, gt=0)
     data_gap_multiplier: float = Field(default=2.0, gt=0)
     market_warmup_seconds: float = Field(default=15.0, ge=0)
+    resume_model_run_id: int | None = Field(default=None, ge=1)
 
     @field_validator("dry_run")
     @classmethod
@@ -114,6 +115,9 @@ class LiveExperimentRunner:
         self._install_signal_handlers()
         self._ensure_research_run()
         self.state.running = True
+        if self.config.max_cycles is not None and self.state.cycles_completed >= self.config.max_cycles:
+            await self.stop()
+            return self.state
         if hasattr(self.market_feed, "run"):
             self._market_task = asyncio.create_task(self.market_feed.run())
             await self._wait_for_market_warmup()
@@ -271,6 +275,9 @@ class LiveExperimentRunner:
     def _ensure_research_run(self) -> None:
         if self.state.model_run_id is not None:
             return
+        if self.config.resume_model_run_id is not None:
+            self._resume_research_run()
+            return
 
         def create(db: Any) -> None:
             experiment = self.repo.create_experiment(
@@ -302,6 +309,57 @@ class LiveExperimentRunner:
             self.state.prompt_template_id = prompt_template.id
 
         self._with_db(create)
+
+    def _resume_research_run(self) -> None:
+        resume_model_run_id = self.config.resume_model_run_id
+        if resume_model_run_id is None:
+            return
+
+        data = self._with_db(lambda db: self.repo.load_live_run_resume_state(db, model_run_id=resume_model_run_id))
+        model_name = str(data["model_name"])
+        if model_name != self.config.model_name:
+            raise ValueError(
+                f"Cannot resume model_run_id={resume_model_run_id}: DB model is {model_name!r}, "
+                f"but config model is {self.config.model_name!r}."
+            )
+
+        def mark_running(db: Any) -> Any:
+            self.repo.mark_model_run_running(db, model_run_id=resume_model_run_id)
+            prompt_template = self.repo.upsert_prompt_template(
+                db,
+                version=self.config.prompt_version,
+                template_text=PROMPT_TEMPLATE,
+                template_hash=template_hash(PROMPT_TEMPLATE),
+                metadata={"execution_mode": "paper_trading", "resumed_model_run_id": resume_model_run_id},
+            )
+            return prompt_template.id
+
+        prompt_template_id = self._with_db(mark_running)
+
+        stored_config = data.get("config", {})
+        starting_cash = _finite(stored_config.get("starting_balance", self.config.starting_balance))
+        starting_btc = _finite(stored_config.get("starting_btc", self.config.starting_btc))
+        portfolio = _portfolio_from_fills(
+            fills=data["fills"],
+            starting_cash=starting_cash,
+            starting_btc=starting_btc,
+        )
+        trade_pnls = [
+            _finite(fill["realized_pnl"])
+            for fill in data["fills"]
+            if str(fill["side"]).upper() == "SELL" and _finite(fill["filled_qty"]) > 0
+        ]
+        self.state.experiment_id = int(data["experiment_id"])
+        self.state.model_run_id = resume_model_run_id
+        self.state.prompt_template_id = prompt_template_id
+        self.state.cash = _finite(portfolio["cash"])
+        self.state.btc = _finite(portfolio["btc"])
+        self.state.avg_entry_price = portfolio["avg_entry_price"]
+        self.state.cycles_completed = int(data["next_cycle_index"])
+        self.state.equity_series = [_finite(value) for value in data["equity_series"]]
+        self.state.trade_pnls = trade_pnls
+        self.state.consecutive_losses = _consecutive_losses(trade_pnls)
+        self.state.data_gap_cycles = int(data["data_gap_cycles"])
 
     def _log_inference(
         self,
@@ -708,6 +766,55 @@ def _weighted_entry_price(
     if total_btc <= 0:
         return fill_price
     return (current_avg * current_btc + fill_price * fill_quantity) / total_btc
+
+
+def _portfolio_from_fills(
+    *,
+    fills: list[dict[str, Any]],
+    starting_cash: float,
+    starting_btc: float,
+) -> dict[str, float | None]:
+    cash = _finite(starting_cash)
+    btc = _finite(starting_btc)
+    avg_entry_price: float | None = None
+    for fill in fills:
+        side = str(fill.get("side", "")).upper()
+        quantity = _finite(fill.get("filled_qty"))
+        if quantity <= 0:
+            continue
+        fill_price = _finite(fill.get("fill_price"))
+        fee = _finite(fill.get("fee"))
+        if side == "BUY":
+            previous_btc = btc
+            cash -= quantity * fill_price + fee
+            btc += quantity
+            avg_entry_price = _weighted_entry_price(
+                current_avg=avg_entry_price,
+                current_btc=previous_btc,
+                fill_price=fill_price,
+                fill_quantity=quantity,
+            )
+        elif side == "SELL":
+            cash += quantity * fill_price - fee
+            btc -= quantity
+            if btc <= 1e-12:
+                btc = 0.0
+                avg_entry_price = None
+    return {
+        "cash": _finite(cash),
+        "btc": _finite(btc),
+        "avg_entry_price": avg_entry_price,
+    }
+
+
+def _consecutive_losses(trade_pnls: list[float]) -> int:
+    losses = 0
+    for pnl in reversed(trade_pnls):
+        if pnl < 0:
+            losses += 1
+            continue
+        break
+    return losses
 
 
 def _finite(value: Any) -> float:

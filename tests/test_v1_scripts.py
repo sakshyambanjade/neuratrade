@@ -128,6 +128,120 @@ def test_v1_runner_reports_missing_ollama_models():
     assert missing == ["mistral:7b"]
 
 
+def test_v1_runner_resolves_resume_model_and_latest(tmp_path):
+    db_path = tmp_path / "resume.db"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("CREATE TABLE experiments (id INTEGER, name TEXT)")
+        connection.execute("CREATE TABLE model_runs (id INTEGER, experiment_id INTEGER, model_name TEXT, status TEXT)")
+        connection.execute("CREATE TABLE market_ticks (model_run_id INTEGER, cycle_index INTEGER)")
+        connection.executemany("INSERT INTO experiments VALUES (?, ?)", [(1, "v1-live-old"), (2, "v1-live-qwen")])
+        connection.executemany(
+            "INSERT INTO model_runs VALUES (?, ?, ?, ?)",
+            [
+                (10, 1, "qwen2.5:7b", "completed"),
+                (11, 2, "qwen2.5:7b", "running"),
+                (12, 2, "mistral:7b", "completed"),
+            ],
+        )
+    args = Namespace(
+        db_path=str(db_path),
+        resume_model_run_id=None,
+        resume_latest=True,
+        experiment_prefix="v1-live",
+        all_models=False,
+        models=None,
+        model="qwen2.5:7b",
+    )
+
+    models = v1_runner.resolve_resume_args(args, ["qwen2.5:7b"])
+
+    assert models == ["qwen2.5:7b"]
+    assert args.resume_model_run_id == 11
+    assert v1_runner.model_name_for_model_run(db_path, 12) == "mistral:7b"
+
+
+def test_v1_runner_builds_auto_resume_plan(tmp_path):
+    db_path = tmp_path / "autopilot.db"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("CREATE TABLE experiments (id INTEGER, name TEXT)")
+        connection.execute("CREATE TABLE model_runs (id INTEGER, experiment_id INTEGER, model_name TEXT, status TEXT)")
+        connection.execute("CREATE TABLE market_ticks (model_run_id INTEGER, cycle_index INTEGER)")
+        connection.executemany(
+            "INSERT INTO experiments VALUES (?, ?)",
+            [(1, "v1-live-qwen"), (2, "v1-live-llama")],
+        )
+        connection.executemany(
+            "INSERT INTO model_runs VALUES (?, ?, ?, ?)",
+            [
+                (10, 1, "qwen2.5:7b", "completed"),
+                (11, 2, "llama3.1:8b", "completed"),
+            ],
+        )
+        connection.executemany("INSERT INTO market_ticks VALUES (?, ?)", [(10, 0), (10, 1), (11, 0), (11, 1), (11, 2)])
+    args = Namespace(db_path=str(db_path), experiment_prefix="v1-live", max_cycles=3)
+
+    plan = v1_runner.build_auto_resume_plan(["qwen2.5:7b", "llama3.1:8b", "gemma2:2b"], args)
+
+    assert plan[0].resume_model_run_id == 10
+    assert plan[0].cycles_completed == 2
+    assert plan[0].skip is False
+    assert plan[1].resume_model_run_id == 11
+    assert plan[1].cycles_completed == 3
+    assert plan[1].skip is True
+    assert plan[2].resume_model_run_id is None
+    assert plan[2].status == "new"
+
+
+def test_v1_runner_auto_resume_runs_unfinished_and_new(tmp_path, monkeypatch):
+    db_path = tmp_path / "autopilot.db"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("CREATE TABLE experiments (id INTEGER, name TEXT)")
+        connection.execute("CREATE TABLE model_runs (id INTEGER, experiment_id INTEGER, model_name TEXT, status TEXT)")
+        connection.execute("CREATE TABLE market_ticks (model_run_id INTEGER, cycle_index INTEGER)")
+        connection.executemany(
+            "INSERT INTO experiments VALUES (?, ?)",
+            [(1, "v1-live-qwen"), (2, "v1-live-llama")],
+        )
+        connection.executemany(
+            "INSERT INTO model_runs VALUES (?, ?, ?, ?)",
+            [
+                (10, 1, "qwen2.5:7b", "completed"),
+                (11, 2, "llama3.1:8b", "completed"),
+            ],
+        )
+        connection.executemany("INSERT INTO market_ticks VALUES (?, ?)", [(10, 0), (10, 1), (11, 0), (11, 1), (11, 2)])
+    captured = []
+
+    async def fake_run_model(model_name, args, *, resume_model_run_id=None):
+        captured.append((model_name, resume_model_run_id))
+
+    monkeypatch.setattr(v1_runner, "run_model", fake_run_model)
+    args = Namespace(db_path=str(db_path), experiment_prefix="v1-live", max_cycles=3, auto_resume=True)
+
+    asyncio.run(v1_runner.run_selected_models(["qwen2.5:7b", "llama3.1:8b", "gemma2:2b"], args))
+
+    assert captured == [("qwen2.5:7b", 10), ("gemma2:2b", None)]
+
+
+def test_v1_runner_resume_rejects_model_mismatch(tmp_path):
+    db_path = tmp_path / "resume.db"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("CREATE TABLE model_runs (id INTEGER, model_name TEXT)")
+        connection.execute("INSERT INTO model_runs VALUES (12, 'mistral:7b')")
+    args = Namespace(
+        db_path=str(db_path),
+        resume_model_run_id=12,
+        resume_latest=False,
+        experiment_prefix="v1-live",
+        all_models=False,
+        models=None,
+        model="qwen2.5:7b",
+    )
+
+    with pytest.raises(PreflightError, match="Cannot resume"):
+        v1_runner.resolve_resume_args(args, ["qwen2.5:7b"])
+
+
 def test_v1_preflight_success_and_prefill_failure(tmp_path):
     db_path = tmp_path / "trading.db"
     with sqlite3.connect(db_path) as connection:

@@ -452,3 +452,73 @@ def finish_model_run(
     db.commit()
     db.refresh(model_run)
     return model_run
+
+
+def mark_model_run_running(
+    db: Session,
+    *,
+    model_run_id: int,
+) -> models.ModelRun:
+    model_run = db.get(models.ModelRun, model_run_id)
+    if model_run is None:
+        raise ValueError(f"model run {model_run_id} not found")
+    model_run.status = "running"
+    model_run.ended_at = None
+    db.commit()
+    db.refresh(model_run)
+    return model_run
+
+
+def load_live_run_resume_state(db: Session, *, model_run_id: int) -> dict[str, Any]:
+    model_run = db.get(models.ModelRun, model_run_id)
+    if model_run is None:
+        raise ValueError(f"model run {model_run_id} not found")
+    experiment = model_run.experiment
+    config = _loads_json(getattr(experiment, "config_json", "{}"))
+    ticks = (
+        db.query(models.MarketTick)
+        .filter(models.MarketTick.model_run_id == model_run_id)
+        .order_by(models.MarketTick.cycle_index.asc(), models.MarketTick.id.asc())
+        .all()
+    )
+    fills = (
+        db.query(models.ExecutionFill)
+        .filter(models.ExecutionFill.model_run_id == model_run_id)
+        .order_by(models.ExecutionFill.id.asc())
+        .all()
+    )
+    metrics = (
+        db.query(models.MetricSnapshot)
+        .filter(models.MetricSnapshot.model_run_id == model_run_id)
+        .order_by(models.MetricSnapshot.id.asc())
+        .all()
+    )
+    next_cycle_index = max((int(tick.cycle_index) for tick in ticks), default=-1) + 1
+    return {
+        "experiment_id": int(model_run.experiment_id),
+        "model_run_id": int(model_run.id),
+        "model_name": model_run.model_name,
+        "status": model_run.status,
+        "config": config,
+        "next_cycle_index": next_cycle_index,
+        "data_gap_cycles": sum(1 for tick in ticks if bool(tick.data_gap)),
+        "equity_series": [float(metric.equity) for metric in metrics],
+        "fills": [
+            {
+                "side": fill.side,
+                "filled_qty": fill.filled_qty,
+                "fill_price": fill.fill_price,
+                "fee": fill.fee,
+                "realized_pnl": fill.realized_pnl,
+            }
+            for fill in fills
+        ],
+    }
+
+
+def _loads_json(value: str) -> dict[str, Any]:
+    try:
+        data = json.loads(value or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}

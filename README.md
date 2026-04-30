@@ -95,6 +95,28 @@ python run_v1_experiment.py --model qwen2.5:7b --max-cycles 10 --experiment-pref
 
 Use a short `max_cycles` value while testing. Omit it for a longer supervised run, and stop the process with `Ctrl-C`.
 
+To resume an interrupted V1 run, continue the same `model_runs.id` and keep
+`--max-cycles` as the total target. The runner restores balances from prior
+fills and logs the next cycle after the last stored cycle index:
+
+```bash
+cd backend
+python run_v1_experiment.py --resume-model-run-id 2 --max-cycles 10080
+```
+
+For the full V1 paper run, use autopilot mode from the repository root. It
+runs the default five-model matrix one model at a time, resumes the latest
+unfinished run for each model, skips models that already reached the cycle
+target, and then switches to the next model automatically:
+
+```bash
+make v1-autopilot
+```
+
+Restart the same command after a disconnect or reboot. Keep the same
+`--experiment-prefix` if you override it, because autopilot uses that prefix to
+find the matching prior runs.
+
 ## Compare Models
 
 Model comparison runs each local model against the same price series and ranks results by Sharpe ratio, drawdown, and return. When mocked decisions are not supplied, each model is queried through Ollama.

@@ -5,7 +5,8 @@ Run from backend/:
     python run_v1_experiment.py --model qwen2.5:7b
 
 By default this runs one model for 10,080 one-minute cycles. Use --all-models
-or --models to run the V1 matrix sequentially.
+--auto-resume for the V1 autopilot: resume unfinished runs, skip completed
+models, and switch through the model matrix sequentially.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import platform
 import socket
 import sqlite3
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.error import URLError
 from urllib.parse import urljoin
@@ -47,8 +49,20 @@ class PreflightError(RuntimeError):
     pass
 
 
-async def run_model(model_name: str, args: argparse.Namespace) -> None:
+@dataclass(frozen=True)
+class AutoResumeRun:
+    model_name: str
+    resume_model_run_id: int | None
+    cycles_completed: int
+    status: str
+    skip: bool = False
+
+
+async def run_model(model_name: str, args: argparse.Namespace, *, resume_model_run_id: int | None = None) -> None:
     experiment_name = f"{args.experiment_prefix}-{_slug(model_name)}"
+    selected_resume_id = (
+        resume_model_run_id if resume_model_run_id is not None else getattr(args, "resume_model_run_id", None)
+    )
     config = LiveRunConfig(
         model_name=model_name,
         symbol=args.symbol,
@@ -63,8 +77,11 @@ async def run_model(model_name: str, args: argparse.Namespace) -> None:
         temperature=args.temperature,
         hardware_tag=args.hardware_tag,
         market_warmup_seconds=args.market_warmup_seconds,
+        resume_model_run_id=selected_resume_id,
     )
-    print(f"Starting {model_name} as {experiment_name}...")
+    verb = "Resuming" if selected_resume_id is not None else "Starting"
+    suffix = f" from model_run_id={selected_resume_id}" if selected_resume_id is not None else ""
+    print(f"{verb} {model_name} as {experiment_name}{suffix}...")
     state = await LiveExperimentRunner(config).start()
     print(
         "Done: "
@@ -74,6 +91,24 @@ async def run_model(model_name: str, args: argparse.Namespace) -> None:
 
 
 async def run_selected_models(models: list[str], args: argparse.Namespace) -> None:
+    if getattr(args, "auto_resume", False):
+        for planned in build_auto_resume_plan(models, args):
+            if planned.skip:
+                print(
+                    f"Skipping {planned.model_name}: latest model_run_id={planned.resume_model_run_id} "
+                    f"already has {planned.cycles_completed}/{args.max_cycles} cycles."
+                )
+                continue
+            if planned.resume_model_run_id is None:
+                print(f"Autopilot: no prior {planned.model_name} run found; starting fresh.")
+            else:
+                print(
+                    f"Autopilot: {planned.model_name} has {planned.cycles_completed}/{args.max_cycles} cycles "
+                    f"({planned.status}); resuming model_run_id={planned.resume_model_run_id}."
+                )
+            await run_model(planned.model_name, args, resume_model_run_id=planned.resume_model_run_id)
+        return
+
     for model_name in models:
         await run_model(model_name, args)
 
@@ -202,6 +237,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skip-ollama-preflight", action="store_true", help="Bypass the Ollama server/model check.")
     parser.add_argument("--skip-market-preflight", action="store_true", help="Bypass the Binance DNS check.")
     parser.add_argument("--preflight-only", action="store_true", help="Run checks and exit without starting cycles.")
+    resume_group = parser.add_mutually_exclusive_group()
+    resume_group.add_argument("--resume-model-run-id", type=int, default=None, help="Resume an existing model_runs.id.")
+    resume_group.add_argument(
+        "--resume-latest",
+        action="store_true",
+        help="Resume the latest model run matching --model and --experiment-prefix.",
+    )
+    parser.add_argument(
+        "--auto-resume",
+        action="store_true",
+        help=(
+            "For --all-models/--models, automatically resume each unfinished model, "
+            "skip completed models, and continue through the list."
+        ),
+    )
     return parser
 
 
@@ -213,6 +263,120 @@ def selected_models(args: argparse.Namespace) -> list[str]:
     return [args.model or os.getenv("LLM_MODEL") or V1_MODELS[0]]
 
 
+def resolve_resume_args(args: argparse.Namespace, models: list[str]) -> list[str]:
+    if getattr(args, "auto_resume", False):
+        if args.resume_model_run_id is not None or args.resume_latest:
+            raise PreflightError("--auto-resume cannot be combined with --resume-model-run-id or --resume-latest.")
+        return models
+    if args.resume_model_run_id is None and not args.resume_latest:
+        return models
+    if args.all_models or args.models or len(models) != 1:
+        raise PreflightError(
+            "Resume mode supports exactly one model. Use --model with --resume-latest or --resume-model-run-id."
+        )
+    if args.resume_latest:
+        args.resume_model_run_id = latest_model_run_id(
+            args.db_path,
+            model_name=models[0],
+            experiment_prefix=args.experiment_prefix,
+        )
+    resume_model = model_name_for_model_run(args.db_path, args.resume_model_run_id)
+    if resume_model != models[0]:
+        if args.model is not None:
+            raise PreflightError(
+                f"Cannot resume model_run_id={args.resume_model_run_id}: DB model is {resume_model!r}, "
+                f"but --model is {models[0]!r}."
+            )
+        return [resume_model]
+    return models
+
+
+def model_name_for_model_run(db_path: str | Path, model_run_id: int | None) -> str:
+    if model_run_id is None:
+        raise PreflightError("No model run id was provided for resume.")
+    try:
+        with sqlite3.connect(db_path) as connection:
+            row = connection.execute("SELECT model_name FROM model_runs WHERE id = ?", (model_run_id,)).fetchone()
+    except sqlite3.Error as exc:
+        raise PreflightError(f"Cannot inspect model run {model_run_id} in {db_path}: {exc}") from exc
+    if row is None:
+        raise PreflightError(f"model_run_id={model_run_id} was not found in {db_path}.")
+    return str(row[0])
+
+
+def latest_model_run_id(db_path: str | Path, *, model_name: str, experiment_prefix: str) -> int:
+    summary = latest_model_run_summary(db_path, model_name=model_name, experiment_prefix=experiment_prefix)
+    if summary is None:
+        raise PreflightError(f"No prior model run found for model={model_name!r} and prefix={experiment_prefix!r}.")
+    return int(summary["id"])
+
+
+def latest_model_run_summary(
+    db_path: str | Path,
+    *,
+    model_name: str,
+    experiment_prefix: str,
+) -> dict[str, int | str] | None:
+    try:
+        with sqlite3.connect(db_path) as connection:
+            row = connection.execute(
+                """
+                SELECT mr.id, mr.status
+                FROM model_runs mr
+                JOIN experiments e ON e.id = mr.experiment_id
+                WHERE mr.model_name = ? AND e.name LIKE ?
+                ORDER BY mr.id DESC
+                LIMIT 1
+                """,
+                (model_name, f"{experiment_prefix}-%"),
+            ).fetchone()
+            if row is None:
+                return None
+            cycles_row = connection.execute(
+                "SELECT COALESCE(MAX(cycle_index) + 1, 0) FROM market_ticks WHERE model_run_id = ?",
+                (int(row[0]),),
+            ).fetchone()
+    except sqlite3.Error as exc:
+        raise PreflightError(f"Cannot inspect latest model run in {db_path}: {exc}") from exc
+    return {
+        "id": int(row[0]),
+        "status": str(row[1]),
+        "cycles_completed": int(cycles_row[0]) if cycles_row else 0,
+    }
+
+
+def build_auto_resume_plan(models: list[str], args: argparse.Namespace) -> list[AutoResumeRun]:
+    plan: list[AutoResumeRun] = []
+    for model_name in models:
+        summary = latest_model_run_summary(
+            args.db_path,
+            model_name=model_name,
+            experiment_prefix=args.experiment_prefix,
+        )
+        if summary is None:
+            plan.append(
+                AutoResumeRun(
+                    model_name=model_name,
+                    resume_model_run_id=None,
+                    cycles_completed=0,
+                    status="new",
+                )
+            )
+            continue
+        cycles_completed = int(summary["cycles_completed"])
+        skip = args.max_cycles is not None and cycles_completed >= args.max_cycles
+        plan.append(
+            AutoResumeRun(
+                model_name=model_name,
+                resume_model_run_id=int(summary["id"]),
+                cycles_completed=cycles_completed,
+                status=str(summary["status"]),
+                skip=skip,
+            )
+        )
+    return plan
+
+
 def _slug(value: str) -> str:
     return "".join(character if character.isalnum() else "-" for character in value).strip("-").lower()
 
@@ -221,6 +385,7 @@ def main() -> None:
     args = build_parser().parse_args()
     models = selected_models(args)
     try:
+        models = resolve_resume_args(args, models)
         run_preflight(models, args)
     except PreflightError as exc:
         print(f"Preflight failed: {exc}", file=sys.stderr)
