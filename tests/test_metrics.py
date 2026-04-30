@@ -2,6 +2,7 @@ import math
 
 from api.routes.metrics import metrics
 from services.metrics import (
+    NO_LOSS_PROFIT_FACTOR,
     average_latency,
     average_slippage,
     calmar_ratio,
@@ -36,7 +37,10 @@ def test_sharpe_no_crash_on_flat_equity():
 
 
 def test_extended_risk_metrics_are_finite_for_known_series():
-    equity = [100, 110, 99, 120, 108]
+    equity = [100.0]
+    for index in range(40):
+        step_return = -0.004 if index % 6 == 0 else 0.006
+        equity.append(equity[-1] * (1 + step_return))
 
     assert sortino_ratio(equity) > 0
     assert calmar_ratio(equity) > 0
@@ -56,6 +60,18 @@ def test_win_rate_known_pnl_list():
 
 def test_profit_factor_known_pnl_list():
     assert profit_factor([10, -5, 0, 5]) == 3.0
+
+
+def test_profit_factor_caps_no_loss_winners():
+    assert profit_factor([10, 5]) == NO_LOSS_PROFIT_FACTOR
+
+
+def test_risk_adjusted_metrics_require_minimum_sample_size():
+    short_equity = [100, 101, 102, 103, 104, 105, 106, 107]
+
+    assert sharpe_ratio(short_equity) == 0.0
+    assert sortino_ratio(short_equity) == 0.0
+    assert calmar_ratio(short_equity) == 0.0
 
 
 def test_metrics_never_return_nan_for_sparse_inputs():

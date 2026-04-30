@@ -10,6 +10,12 @@ Use fixed seeds for any stochastic model sampling, synthetic price generation, r
 
 Store the complete experiment configuration with each run. Include model names and versions, prompt settings, price source, symbol, starting balances, fee assumptions, risk settings, slippage settings, latency settings, and output paths.
 
+Use exact model tags where possible, such as `qwen2.5:7b-instruct-q4_K_M`, and record the Ollama version in the experiment metadata. The bundled metadata writer captures local hardware and `ollama --version` output when available.
+
+## Price Windows
+
+Risk-adjusted metrics need enough observations to be meaningful. Use at least 1,000 matched price points for benchmark claims, and prefer 30 or more days of historical BTC data when preparing publication tables. The network-free `make reproduce` demo uses a deterministic 1,440-point synthetic BTC minute window with non-annualized demo risk metrics so reviewers can validate the artifact pipeline without external services.
+
 ## CSV Outputs
 
 Model comparisons and ablations should write CSV artifacts such as `model_comparison.csv` and `ablation_results.csv`. CSV files are the primary tabular record used for ranking, analysis, and report generation.

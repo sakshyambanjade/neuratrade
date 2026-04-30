@@ -6,6 +6,8 @@ NeuraTradeBench experiments are designed to compare model behavior and isolate s
 
 Model comparison runs multiple local Ollama models over the same price series. Each model receives equivalent market context, produces trading decisions, and is scored with the same simulator and metrics. Results are ranked by Sharpe ratio, drawdown, and cumulative return.
 
+Leaderboard runs include deterministic baselines by default: random actions, buy-and-hold, EMA crossover, and always-hold. Keep these rows in publication tables so readers can see whether an LLM adds value over trivial policies.
+
 Use model comparison to answer questions such as:
 
 - Which local model produces the most stable simulated equity curve?
@@ -31,3 +33,5 @@ The latency ablation compares normal simulated latency with zero-latency fills. 
 ## Recommended Controls
 
 Use the same price series, starting balances, fee assumptions, model versions, prompts, and random seeds for every variant in a comparison. Store the generated CSV, JSON, logs, and reports with the experiment configuration.
+
+For benchmark claims, use at least 1,000 matched price points and report bootstrap confidence intervals plus pairwise tests on matched period returns. Smoke tests can use shorter windows, but risk-adjusted metrics intentionally return `0.0` until at least 30 period returns are available.

@@ -112,12 +112,15 @@ result = compare_models(
         models=["llama3.2:1b", "tinyllama"],
         prices=[65000, 65120, 64980, 65340, 65210],
         output_csv_path="../artifacts/model_comparison.csv",
+        include_baselines=False,
     )
 )
 
 print(result.model_dump_json(indent=2))
 PY
 ```
+
+Publication-style comparisons should keep the default baseline strategies enabled and use at least 1,000 matched price points.
 
 ## Run Ablations
 
@@ -187,6 +190,7 @@ It writes outputs to `artifacts/demo/`:
 artifacts/demo/
   experiment_config.json
   model_comparison.csv
+  model_comparison_statistics.json
   ablation_results.csv
   ablation_summary.json
   model_sharpe.png
@@ -202,7 +206,7 @@ Example leaderboard shape:
 | llama3.1:8b | 0.002 | 0.84 | 0.018 | 0.33 | 25 ms |
 | gemma2:2b | 0.000 | 0.00 | 0.000 | 0.00 | 25 ms |
 
-The demo uses mocked decisions so CI and reviewers can reproduce the artifact pipeline without Ollama, Binance, wallets, or exchange credentials.
+The demo uses 1,440 deterministic synthetic BTC minute prices, mocked decisions, baseline strategies, non-annualized demo risk metrics, bootstrap confidence intervals, and pairwise return tests so CI and reviewers can reproduce the artifact pipeline without Ollama, Binance, wallets, or exchange credentials.
 
 ## Research Motivation
 
@@ -237,3 +241,4 @@ NeuraTradeBench is a simulator and paper-trading research system only. It is not
 - [Metrics](docs/metrics.md)
 - [Safety And Limits](docs/safety_and_limits.md)
 - [Reproducibility](docs/reproducibility.md)
+- [Citation](CITATION.bib)

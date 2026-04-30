@@ -1,7 +1,9 @@
-.PHONY: paper-demo test lint run
+.PHONY: paper-demo reproduce test lint run
 
 paper-demo:
 	scripts/paper_demo.sh
+
+reproduce: paper-demo
 
 test:
 	scripts/test.sh

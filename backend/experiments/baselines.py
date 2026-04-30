@@ -29,6 +29,7 @@ class BaselineConfig(BaseModel):
     minute_volume: float = Field(default=100.0, ge=0)
     volatility: float = Field(default=0.0, ge=0)
     latency_ms: int = Field(default=0, ge=0)
+    periods_per_year: int = Field(default=525_600, gt=0)
 
 
 class BaselineResult(BaseModel):
@@ -68,6 +69,7 @@ def _run_one(config: BaselineConfig, name: BaselineName) -> ExperimentResult:
             minute_volume=config.minute_volume,
             volatility=config.volatility,
             latency_ms=config.latency_ms,
+            periods_per_year=config.periods_per_year,
         )
     )
 
@@ -76,7 +78,7 @@ def _decisions(prices: list[float], name: BaselineName, *, seed: int) -> list[di
     if name == "always_hold":
         return [_decision("HOLD", 0.0) for _ in prices]
     if name == "buy_and_hold":
-        return [_decision("BUY", 1.0), *[_decision("HOLD", 0.0) for _ in prices[1:]]]
+        return [_decision("BUY", 0.95), *[_decision("HOLD", 0.0) for _ in prices[1:]]]
     if name == "random":
         rng = random.Random(seed)
         return [_decision(rng.choice(["BUY", "SELL", "HOLD"]), 0.25) for _ in prices]

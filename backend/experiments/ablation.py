@@ -43,6 +43,7 @@ class AblationConfig(BaseModel):
     minute_volume: float = Field(default=100.0, ge=0)
     volatility: float = Field(default=0.01, ge=0)
     latency_ms: int = Field(default=25, ge=0)
+    periods_per_year: int = Field(default=525_600, gt=0)
     output_dir: str | None = None
     variants: list[VariantName] = Field(
         default_factory=lambda: [
@@ -231,9 +232,9 @@ def _run_variant(config: AblationConfig, variant: AblationVariant) -> AblationRu
         variant=variant.name,
         price_series=list(config.prices),
         cumulative_return=_finite(cumulative_return(equity_series)),
-        sharpe=_finite(sharpe_ratio(equity_series)),
-        sortino=_finite(sortino_ratio(equity_series)),
-        calmar=_finite(calmar_ratio(equity_series)),
+        sharpe=_finite(sharpe_ratio(equity_series, periods_per_year=config.periods_per_year)),
+        sortino=_finite(sortino_ratio(equity_series, periods_per_year=config.periods_per_year)),
+        calmar=_finite(calmar_ratio(equity_series, periods_per_year=config.periods_per_year)),
         value_at_risk_95=_finite(value_at_risk_95(equity_series)),
         conditional_value_at_risk_95=_finite(conditional_value_at_risk_95(equity_series)),
         max_drawdown=_finite(max_drawdown(equity_series)),

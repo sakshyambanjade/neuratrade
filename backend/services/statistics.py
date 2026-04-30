@@ -10,7 +10,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy import stats
 
-from services.metrics import cumulative_return, sharpe_ratio, win_rate
+from services.metrics import cumulative_return, sharpe_ratio, simple_returns, win_rate
 
 
 @dataclass(frozen=True)
@@ -37,18 +37,25 @@ def bootstrap_confidence_intervals(
     *,
     resamples: int = 1000,
     seed: int = 42,
+    periods_per_year: int = 525_600,
 ) -> list[ConfidenceInterval]:
+    if resamples <= 0:
+        raise ValueError("resamples must be positive")
+    if periods_per_year <= 0:
+        raise ValueError("periods_per_year must be positive")
+
     rng = np.random.default_rng(seed)
     equity = np.array(equity_series, dtype=float)
-    pnls = np.array(trade_pnls or [0.0], dtype=float)
+    returns = np.array(simple_returns(equity_series), dtype=float)
+    pnls = np.array(trade_pnls, dtype=float)
     rows: dict[str, list[float]] = {"sharpe": [], "return": [], "win_rate": []}
-    if len(equity) < 2:
+    if len(equity) < 2 or len(returns) == 0:
         return [ConfidenceInterval(metric=name, lower=0.0, upper=0.0, samples=0) for name in rows]
     for _ in range(resamples):
-        indices = rng.integers(0, len(equity), size=len(equity))
-        sampled_equity = equity[np.sort(indices)].tolist()
-        sampled_pnls = pnls[rng.integers(0, len(pnls), size=len(pnls))].tolist()
-        rows["sharpe"].append(sharpe_ratio(sampled_equity))
+        sampled_returns = returns[rng.integers(0, len(returns), size=len(returns))]
+        sampled_equity = _equity_from_returns(float(equity[0]), sampled_returns)
+        sampled_pnls = pnls[rng.integers(0, len(pnls), size=len(pnls))].tolist() if len(pnls) > 0 else []
+        rows["sharpe"].append(sharpe_ratio(sampled_equity, periods_per_year=periods_per_year))
         rows["return"].append(cumulative_return(sampled_equity))
         rows["win_rate"].append(win_rate(sampled_pnls))
     return [
@@ -62,6 +69,21 @@ def bootstrap_confidence_intervals(
     ]
 
 
+def pairwise_return_test(
+    left_equity_series: list[float],
+    right_equity_series: list[float],
+    *,
+    comparisons: int = 1,
+    prefer_wilcoxon: bool = True,
+) -> PairwiseTestResult:
+    return _pairwise_sample_test(
+        simple_returns(left_equity_series),
+        simple_returns(right_equity_series),
+        comparisons=comparisons,
+        prefer_wilcoxon=prefer_wilcoxon,
+    )
+
+
 def pairwise_pnl_test(
     left: list[float],
     right: list[float],
@@ -69,13 +91,30 @@ def pairwise_pnl_test(
     comparisons: int = 1,
     prefer_wilcoxon: bool = True,
 ) -> PairwiseTestResult:
+    return _pairwise_sample_test(
+        left,
+        right,
+        comparisons=comparisons,
+        prefer_wilcoxon=prefer_wilcoxon,
+    )
+
+
+def _pairwise_sample_test(
+    left: list[float],
+    right: list[float],
+    *,
+    comparisons: int,
+    prefer_wilcoxon: bool,
+) -> PairwiseTestResult:
     n = min(len(left), len(right))
     if n == 0:
         return PairwiseTestResult("none", 0.0, 1.0, 1.0, 0.0, 0)
     left_arr = np.array(left[:n], dtype=float)
     right_arr = np.array(right[:n], dtype=float)
     diff = left_arr - right_arr
-    if prefer_wilcoxon and n > 1 and np.any(diff):
+    if not np.any(diff):
+        return PairwiseTestResult("no_difference", 0.0, 1.0, 1.0, 0.0, n)
+    if prefer_wilcoxon and n > 1:
         result = stats.wilcoxon(left_arr, right_arr, zero_method="zsplit")
         test_name = "wilcoxon_signed_rank"
     elif n > 1:
@@ -92,6 +131,13 @@ def pairwise_pnl_test(
         effect_size=cohens_d(diff.tolist()),
         n=n,
     )
+
+
+def _equity_from_returns(starting_equity: float, returns: np.ndarray) -> list[float]:
+    equity = [_finite(starting_equity)]
+    for value in returns:
+        equity.append(_finite(equity[-1] * (1 + float(value))))
+    return equity
 
 
 def cohens_d(values: list[float]) -> float:

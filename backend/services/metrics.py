@@ -8,6 +8,9 @@ import math
 from collections.abc import Iterable
 from statistics import mean, pstdev
 
+MIN_RISK_ADJUSTED_RETURNS = 30
+NO_LOSS_PROFIT_FACTOR = 999.0
+
 
 def _finite_series(values: Iterable[float]) -> list[float]:
     return [float(value) for value in values if math.isfinite(float(value))]
@@ -56,7 +59,7 @@ def max_drawdown(equity_series: Iterable[float]) -> float:
 
 def sharpe_ratio(equity_series: Iterable[float], periods_per_year: int = 525_600) -> float:
     returns = simple_returns(equity_series)
-    if len(returns) < 2 or periods_per_year <= 0:
+    if len(returns) < MIN_RISK_ADJUSTED_RETURNS or periods_per_year <= 0:
         return 0.0
 
     volatility = pstdev(returns)
@@ -68,7 +71,7 @@ def sharpe_ratio(equity_series: Iterable[float], periods_per_year: int = 525_600
 def sortino_ratio(equity_series: Iterable[float], periods_per_year: int = 525_600) -> float:
     returns = simple_returns(equity_series)
     downside_returns = [value for value in returns if value < 0]
-    if len(returns) < 2 or not downside_returns or periods_per_year <= 0:
+    if len(returns) < MIN_RISK_ADJUSTED_RETURNS or not downside_returns or periods_per_year <= 0:
         return 0.0
 
     downside_deviation = math.sqrt(mean([value * value for value in downside_returns]))
@@ -79,7 +82,7 @@ def sortino_ratio(equity_series: Iterable[float], periods_per_year: int = 525_60
 
 def calmar_ratio(equity_series: Iterable[float], periods_per_year: int = 525_600) -> float:
     returns = simple_returns(equity_series)
-    if not returns or periods_per_year <= 0:
+    if len(returns) < MIN_RISK_ADJUSTED_RETURNS or periods_per_year <= 0:
         return 0.0
 
     drawdown = max_drawdown(equity_series)
@@ -165,5 +168,5 @@ def profit_factor(trade_pnls: Iterable[float]) -> float:
     gross_profit = sum(pnl for pnl in pnls if pnl > 0)
     gross_loss = abs(sum(pnl for pnl in pnls if pnl < 0))
     if gross_loss == 0:
-        return 0.0
+        return NO_LOSS_PROFIT_FACTOR if gross_profit > 0 else 0.0
     return _safe_number(gross_profit / gross_loss)

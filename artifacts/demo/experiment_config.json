@@ -1,5 +1,11 @@
 {
   "ablation_csv": "../artifacts/demo/ablation_results.csv",
+  "baselines": [
+    "random",
+    "buy_and_hold",
+    "ema_crossover",
+    "always_hold"
+  ],
   "comparison_csv": "../artifacts/demo/model_comparison.csv",
   "experiment": "paper-demo",
   "models": [
@@ -7,7 +13,12 @@
     "llama3.1:8b",
     "gemma2:2b"
   ],
-  "price_points": 8,
-  "prompt_version": "ntb-v1",
-  "seed": 42
+  "periods_per_year": 1,
+  "price_points": 1440,
+  "price_source": "deterministic_synthetic_btc_1m_multi_regime",
+  "price_window_minutes": 1440,
+  "prompt_version": "ntb-v2",
+  "risk_adjusted_metric_scale": "non_annualized_demo",
+  "seed": 42,
+  "statistics_resamples": 500
 }

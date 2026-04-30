@@ -26,11 +26,11 @@ def test_report_file_is_created(tmp_path):
             {
                 "rank": 1,
                 "model": "alpha",
-                "return": 0.1,
-                "sharpe": 1.2,
-                "max_drawdown": 0.05,
-                "win_rate": 0.6,
-                "profit_factor": 1.5,
+                "return": 0.123456,
+                "sharpe": 1.234567,
+                "max_drawdown": 0.056789,
+                "win_rate": 0.654321,
+                "profit_factor": 1.54321,
             }
         ],
     )
@@ -62,6 +62,31 @@ def test_report_file_is_created(tmp_path):
         ],
     )
     (tmp_path / "ablation_summary.json").write_text('{"best_sharpe":"full_system"}', encoding="utf-8")
+    (tmp_path / "model_comparison_statistics.json").write_text(
+        """
+{
+  "bootstrap_intervals": {
+    "alpha": {
+      "return": [0.01, 0.2],
+      "sharpe": [0.5, 1.9],
+      "win_rate": [0.4, 0.8]
+    }
+  },
+  "pairwise_tests": [
+    {
+      "left": "alpha",
+      "right": "beta",
+      "test_name": "wilcoxon_signed_rank",
+      "p_value": 0.012345,
+      "corrected_p_value": 0.024691,
+      "effect_size": 0.333333,
+      "n": 32
+    }
+  ]
+}
+""".strip(),
+        encoding="utf-8",
+    )
     (tmp_path / "equity.png").write_bytes(b"png")
 
     output = tmp_path / "report.md"
@@ -71,6 +96,9 @@ def test_report_file_is_created(tmp_path):
     assert output.exists()
     assert "NeuraTradeBench Experiment 42" in text
     assert "Model Leaderboard" in text
+    assert "0.1235" in text
+    assert "Statistical Validation" in text
+    assert "wilcoxon_signed_rank" in text
     assert "Limitations" in text
     assert "equity.png" in text
 

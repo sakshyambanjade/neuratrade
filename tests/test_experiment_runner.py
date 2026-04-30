@@ -45,3 +45,16 @@ def test_experiment_runner_outputs_no_nan_or_inf():
     assert all(math.isfinite(value) for value in scalar_values)
     assert all(math.isfinite(value) for value in result.equity_series)
     assert all(math.isfinite(value) for value in result.trade_pnls)
+
+
+def test_experiment_runner_respects_metric_period_scale():
+    prices = [100 + index for index in range(40)]
+    decisions = ["BUY"] + ["HOLD"] * 38 + ["SELL"]
+    annualized = run_mock_experiment(
+        ExperimentConfig(prices=prices, mocked_decisions=decisions, fee_bps=0, periods_per_year=525_600)
+    )
+    non_annualized = run_mock_experiment(
+        ExperimentConfig(prices=prices, mocked_decisions=decisions, fee_bps=0, periods_per_year=1)
+    )
+
+    assert annualized.sharpe > non_annualized.sharpe > 0

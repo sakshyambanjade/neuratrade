@@ -6,6 +6,7 @@ from config import MIN_CONFIDENCE
 from pydantic import BaseModel, Field, field_validator
 
 from services.ollama_client import OllamaClient
+from services.prompting import render_prompt
 
 
 class Decision(BaseModel):
@@ -32,15 +33,8 @@ class Decision(BaseModel):
         return v
 
 
-PROMPT_TEMPLATE = """You are a disciplined BTC/USDT trader.
-Return strict JSON with fields: action (BUY/SELL/HOLD), confidence (0-1), position_size_pct (0-1), reasoning, stop_loss, take_profit.
-Use indicators: RSI={rsi:.1f}, MACD={macd:.5f}, BB_upper={bb_upper:.2f}, BB_lower={bb_lower:.2f}, EMA9={ema9:.2f}, EMA21={ema21:.2f}.
-Portfolio total={total_value:.2f}, cash={cash:.2f}, btc={btc:.6f}.
-Recent memories: {memories}
-Respond with JSON only."""
-
-
 def _fallback_rule(indicators: dict) -> Decision:
+    # RSI 30/70 are conventional oversold/overbought guardrails used only when the LLM path fails.
     if indicators.get("rsi", 50) < 30 and indicators.get("macd", 0) > 0:
         return Decision(action="BUY", confidence=0.5, reasoning="Fallback oversold rule")
     if indicators.get("rsi", 50) > 70:
@@ -49,7 +43,20 @@ def _fallback_rule(indicators: dict) -> Decision:
 
 
 def call_llm(indicators: dict, portfolio: dict, memories: list[str]) -> Decision:
-    prompt = PROMPT_TEMPLATE.format(memories=memories, **indicators, **portfolio)
+    prompt = render_prompt(
+        market={
+            "symbol": "BTCUSDT",
+            "last_price": indicators.get("price"),
+            "source": "decision_service",
+        },
+        indicators=indicators,
+        portfolio=portfolio,
+        risk={
+            "dry_run": True,
+            "execution_mode": "paper_trading",
+            "memories": memories,
+        },
+    )
     decision = OllamaClient().decide(prompt, fallback_on_error=False)
     return Decision(**decision.model_dump())
 

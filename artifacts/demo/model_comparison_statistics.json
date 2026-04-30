@@ -1,0 +1,335 @@
+{
+  "bootstrap_intervals": {
+    "baseline:always_hold": {
+      "return": [
+        0.0,
+        0.0
+      ],
+      "sharpe": [
+        0.0,
+        0.0
+      ],
+      "win_rate": [
+        0.0,
+        0.0
+      ]
+    },
+    "baseline:buy_and_hold": {
+      "return": [
+        -0.03504784436406533,
+        0.06734621631440393
+      ],
+      "sharpe": [
+        -0.037660223280171566,
+        0.06924511344255817
+      ],
+      "win_rate": [
+        0.0,
+        0.0
+      ]
+    },
+    "baseline:ema_crossover": {
+      "return": [
+        0.02453676781970106,
+        0.04103411984441533
+      ],
+      "sharpe": [
+        0.14840851991980997,
+        0.2650130687956625
+      ],
+      "win_rate": [
+        0.5,
+        1.0
+      ]
+    },
+    "baseline:random": {
+      "return": [
+        0.000620645190217517,
+        0.004184152501802812
+      ],
+      "sharpe": [
+        0.013895301839943877,
+        0.14562897372397748
+      ],
+      "win_rate": [
+        0.9529411764705882,
+        1.0
+      ]
+    },
+    "gemma2:2b": {
+      "return": [
+        -0.00332319493307881,
+        0.005932247923708094
+      ],
+      "sharpe": [
+        -0.038351112691874814,
+        0.06731463839784098
+      ],
+      "win_rate": [
+        0.16666666666666666,
+        0.8333333333333334
+      ]
+    },
+    "llama3.1:8b": {
+      "return": [
+        0.004504746381963665,
+        0.015752524190448373
+      ],
+      "sharpe": [
+        0.03975510327559855,
+        0.14201237559560392
+      ],
+      "win_rate": [
+        0.16666666666666666,
+        0.8333333333333334
+      ]
+    },
+    "qwen2.5:7b": {
+      "return": [
+        0.013356813365968351,
+        0.026995955516139005
+      ],
+      "sharpe": [
+        0.09652141267936201,
+        0.2104979739932923
+      ],
+      "win_rate": [
+        0.3333333333333333,
+        1.0
+      ]
+    }
+  },
+  "pairwise_tests": [
+    {
+      "corrected_p_value": 5.677511310497227e-16,
+      "effect_size": 0.10147385754907647,
+      "left": "baseline:ema_crossover",
+      "n": 1439,
+      "p_value": 2.7035768145224892e-17,
+      "right": "qwen2.5:7b",
+      "sample": "period_returns",
+      "statistic": 391139.5,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 1.255348082361175e-19,
+      "effect_size": 0.17297335042170256,
+      "left": "baseline:ema_crossover",
+      "n": 1439,
+      "p_value": 5.9778480112436905e-21,
+      "right": "llama3.1:8b",
+      "sample": "period_returns",
+      "statistic": 375548.5,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 1.3257519602089047e-17,
+      "effect_size": 0.1983877870474346,
+      "left": "baseline:ema_crossover",
+      "n": 1439,
+      "p_value": 6.3131045724233555e-19,
+      "right": "baseline:random",
+      "sample": "period_returns",
+      "statistic": 383575.0,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 1.0,
+      "effect_size": 0.020933169744230706,
+      "left": "baseline:ema_crossover",
+      "n": 1439,
+      "p_value": 0.838368541481718,
+      "right": "baseline:buy_and_hold",
+      "sample": "period_returns",
+      "statistic": 514824.0,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 1.2529131409292814e-22,
+      "effect_size": 0.22367537242093435,
+      "left": "baseline:ema_crossover",
+      "n": 1439,
+      "p_value": 5.9662530520441965e-24,
+      "right": "gemma2:2b",
+      "sample": "period_returns",
+      "statistic": 363040.0,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 6.500497125018915e-14,
+      "effect_size": 0.2070751954971661,
+      "left": "baseline:ema_crossover",
+      "n": 1439,
+      "p_value": 3.0954748214375784e-15,
+      "right": "baseline:always_hold",
+      "sample": "period_returns",
+      "statistic": 400043.0,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 3.497258283176077e-09,
+      "effect_size": 0.09279791627893094,
+      "left": "qwen2.5:7b",
+      "n": 1439,
+      "p_value": 1.6653610872267035e-10,
+      "right": "llama3.1:8b",
+      "sample": "period_returns",
+      "statistic": 421737.5,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 1.6162863358894934e-05,
+      "effect_size": 0.12999440237406723,
+      "left": "qwen2.5:7b",
+      "n": 1439,
+      "p_value": 7.696601599473778e-07,
+      "right": "baseline:random",
+      "sample": "period_returns",
+      "statistic": 443246.0,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 1.0,
+      "effect_size": 0.006854620551890514,
+      "left": "qwen2.5:7b",
+      "n": 1439,
+      "p_value": 0.8526194501067011,
+      "right": "baseline:buy_and_hold",
+      "sample": "period_returns",
+      "statistic": 515111.0,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 2.489790325909314e-12,
+      "effect_size": 0.16039163026039277,
+      "left": "qwen2.5:7b",
+      "n": 1439,
+      "p_value": 1.185614440909197e-13,
+      "right": "gemma2:2b",
+      "sample": "period_returns",
+      "statistic": 404636.5,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 1.333671132906398e-06,
+      "effect_size": 0.1533635013436675,
+      "left": "qwen2.5:7b",
+      "n": 1439,
+      "p_value": 6.350814918601896e-08,
+      "right": "baseline:always_hold",
+      "sample": "period_returns",
+      "statistic": 437732.5,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 0.9850529442303024,
+      "effect_size": 0.06298290852047374,
+      "left": "llama3.1:8b",
+      "n": 1439,
+      "p_value": 0.04690728305858583,
+      "right": "baseline:random",
+      "sample": "period_returns",
+      "statistic": 487795.5,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 1.0,
+      "effect_size": -0.0045170335385493355,
+      "left": "llama3.1:8b",
+      "n": 1439,
+      "p_value": 0.629909820659702,
+      "right": "baseline:buy_and_hold",
+      "sample": "period_returns",
+      "statistic": 510443.0,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 0.00026931521965632357,
+      "effect_size": 0.09118275968858482,
+      "left": "llama3.1:8b",
+      "n": 1439,
+      "p_value": 1.282453426934874e-05,
+      "right": "gemma2:2b",
+      "sample": "period_returns",
+      "statistic": 451466.0,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 0.0486862082772797,
+      "effect_size": 0.08930915956295601,
+      "left": "llama3.1:8b",
+      "n": 1439,
+      "p_value": 0.0023183908703466524,
+      "right": "baseline:always_hold",
+      "sample": "period_returns",
+      "statistic": 472341.5,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 1.0,
+      "effect_size": -0.012064458005667208,
+      "left": "baseline:random",
+      "n": 1439,
+      "p_value": 0.6143577238271867,
+      "right": "baseline:buy_and_hold",
+      "sample": "period_returns",
+      "statistic": 510096.0,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 1.0,
+      "effect_size": 0.017015751777869174,
+      "left": "baseline:random",
+      "n": 1439,
+      "p_value": 0.2612817007664895,
+      "right": "gemma2:2b",
+      "sample": "period_returns",
+      "statistic": 500821.0,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 1.0,
+      "effect_size": 0.07797167975027096,
+      "left": "baseline:random",
+      "n": 1439,
+      "p_value": 0.12443150352245193,
+      "right": "baseline:always_hold",
+      "sample": "period_returns",
+      "statistic": 495378.5,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 1.0,
+      "effect_size": 0.014285615427430705,
+      "left": "baseline:buy_and_hold",
+      "n": 1439,
+      "p_value": 0.5245407705290389,
+      "right": "gemma2:2b",
+      "sample": "period_returns",
+      "statistic": 508007.0,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 1.0,
+      "effect_size": 0.014761512311600777,
+      "left": "baseline:buy_and_hold",
+      "n": 1439,
+      "p_value": 0.5760882299851171,
+      "right": "baseline:always_hold",
+      "sample": "period_returns",
+      "statistic": 509225.0,
+      "test_name": "wilcoxon_signed_rank"
+    },
+    {
+      "corrected_p_value": 1.0,
+      "effect_size": 0.011165451537843317,
+      "left": "gemma2:2b",
+      "n": 1439,
+      "p_value": 0.5495990708245474,
+      "right": "baseline:always_hold",
+      "sample": "period_returns",
+      "statistic": 509001.5,
+      "test_name": "wilcoxon_signed_rank"
+    }
+  ]
+}

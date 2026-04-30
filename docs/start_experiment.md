@@ -38,6 +38,7 @@ Create or update `.env` in the repo root or `backend/.env`:
 DRY_RUN=true
 OLLAMA_URL=http://127.0.0.1:11434
 LLM_MODEL=qwen2.5:7b
+LLM_TIMEOUT=60
 DB_PATH=/Users/skb/Documents/NeuraPlay/neuratrade/backend/research_production.db
 SYMBOL=BTCUSDT
 CYCLE_INTERVAL_SECONDS=60

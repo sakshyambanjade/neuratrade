@@ -1,4 +1,5 @@
 import csv
+import json
 import math
 
 from experiments.compare_models import ModelComparisonConfig, compare_models
@@ -14,6 +15,7 @@ def test_multiple_mocked_models_run_successfully():
                 "beta": ["HOLD", "HOLD", "HOLD"],
             },
             fee_bps=0,
+            include_baselines=False,
         )
     )
 
@@ -32,6 +34,7 @@ def test_same_price_series_is_used_for_every_model():
                 "beta": ["HOLD", "BUY", "HOLD", "SELL"],
             },
             fee_bps=0,
+            include_baselines=False,
         )
     )
 
@@ -51,27 +54,34 @@ def test_csv_output_is_created(tmp_path):
             },
             output_csv_path=str(output),
             fee_bps=0,
+            include_baselines=False,
         )
     )
 
     assert result.csv_path == str(output)
     assert output.exists()
+    assert (tmp_path / "model_comparison_statistics.json").exists()
     with output.open(newline="", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
+    with (tmp_path / "model_comparison_statistics.json").open(encoding="utf-8") as handle:
+        statistics = json.load(handle)
     assert [row["model"] for row in rows] == result.ranked_models
+    assert "pairwise_tests" in statistics
 
 
 def test_ranking_uses_sharpe_then_drawdown_then_return():
+    prices = [100 + index for index in range(40)]
     result = compare_models(
         ModelComparisonConfig(
             models=["winner", "flat", "loser"],
-            prices=[100, 130, 90, 120],
+            prices=prices,
             mocked_decisions_by_model={
-                "winner": ["BUY", "HOLD", "HOLD", "SELL"],
-                "flat": ["HOLD", "HOLD", "HOLD", "HOLD"],
-                "loser": ["HOLD", "BUY", "SELL", "HOLD"],
+                "winner": ["BUY"] + ["HOLD"] * 38 + ["SELL"],
+                "flat": ["HOLD"] * 40,
+                "loser": ["HOLD"] * 20 + ["BUY", "SELL"] + ["HOLD"] * 18,
             },
             fee_bps=0,
+            include_baselines=False,
         )
     )
 
@@ -89,6 +99,7 @@ def test_no_nan_or_inf_in_metrics():
                 "beta": ["HOLD", "HOLD", "HOLD"],
             },
             fee_bps=0,
+            include_baselines=False,
         )
     )
 
@@ -102,3 +113,17 @@ def test_no_nan_or_inf_in_metrics():
             row.avg_latency_ms,
         ]
         assert all(math.isfinite(value) for value in values)
+
+
+def test_baselines_are_included_by_default():
+    result = compare_models(
+        ModelComparisonConfig(
+            models=["alpha"],
+            prices=[100, 101, 102, 103],
+            mocked_decisions_by_model={"alpha": ["HOLD", "HOLD", "HOLD", "HOLD"]},
+            fee_bps=0,
+        )
+    )
+
+    assert "alpha" in result.ranked_models
+    assert "baseline:buy_and_hold" in result.ranked_models

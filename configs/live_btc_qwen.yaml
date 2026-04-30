@@ -4,7 +4,7 @@ model_name: qwen2.5:7b
 symbol: BTCUSDT
 dry_run: true
 seed: 42
-prompt_version: ntb-v1
+prompt_version: ntb-v2
 temperature: 0.0
 ollama_model_tag: qwen2.5:7b
 hardware_tag: local-workstation

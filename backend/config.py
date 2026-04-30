@@ -12,7 +12,7 @@ else:
     dotenv.load_dotenv()
 
 # Core
-APP_NAME = "prajnyavan-btc-bot"
+APP_NAME = "NeuraTradeBench"
 ENV = os.getenv("ENV", "dev")
 
 # Ports
@@ -45,7 +45,7 @@ MIN_CONFIDENCE = float(os.getenv("MIN_CONFIDENCE", 0.35))
 # LLM / Brain
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
 LLM_MODEL = os.getenv("LLM_MODEL", "tinyllama")
-LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", 20))
+LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", 60))
 BRAIN_URL = os.getenv("BRAIN_URL", "http://127.0.0.1:8742")
 BRAIN_SECRET = os.getenv("BRAIN_SECRET", "dev-secret")
 USER_ID = os.getenv("USER_ID", "btc_trader")

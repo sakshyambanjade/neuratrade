@@ -1,7 +1,7 @@
 experiment_name: compare-local-models-demo
 description: Compare local Ollama models over an identical BTC price window.
 seed: 42
-prompt_version: ntb-v1
+prompt_version: ntb-v2
 temperature: 0.0
 models:
   - qwen2.5:7b
@@ -20,4 +20,7 @@ spread_bps: 5.0
 minute_volume: 100.0
 volatility: 0.01
 latency_ms: 25
+periods_per_year: 1
+include_baselines: true
+statistics_resamples: 1000
 output_csv_path: artifacts/demo/model_comparison.csv
