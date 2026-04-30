@@ -1,0 +1,14 @@
+model_name: qwen2.5:7b
+symbol: BTCUSDT
+experiment_name: v1-paper-90d-real
+cycle_interval_seconds: 60
+max_cycles: 129600
+dry_run: true
+temperature: 0.0
+fee_bps: 10.0
+slippage_model: sqrt_impact
+seed: 42
+prompt_version: ntb-v2
+description: >
+  v1 paper run. Real Binance BTCUSDT 1-minute feed.
+  90-day historical replay. Full risk engine, memory, and slippage.

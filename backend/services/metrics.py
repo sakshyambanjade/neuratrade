@@ -8,7 +8,8 @@ import math
 from collections.abc import Iterable
 from statistics import mean, pstdev
 
-MIN_RISK_ADJUSTED_RETURNS = 30
+MIN_SAMPLES = 30
+MIN_RISK_ADJUSTED_RETURNS = MIN_SAMPLES
 NO_LOSS_PROFIT_FACTOR = 999.0
 
 

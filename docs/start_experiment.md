@@ -55,10 +55,16 @@ Important guardrails:
 
 ## 3. Start The Experiment
 
-Pre-fill the last 7 days of Binance BTCUSDT 1-minute candles before the live loop:
+Pre-fill the last 90 days of Binance BTCUSDT 1-minute candles before the live loop. This collects the paper target of 129,600 candles. It is resumable: if a previous run stopped after 200 candles, the next run starts at the next missing timestamp instead of duplicating the first 200.
 
 ```bash
 make prefill
+```
+
+For historical replay through the three-model pipeline, run:
+
+```bash
+make run-90d
 ```
 
 From the repo root:

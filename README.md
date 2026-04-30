@@ -74,10 +74,16 @@ npm run dev
 
 Live experiments consume BTC market data, ask a local Ollama model for JSON decisions, pass the decision through risk gates, and simulate fills only. They do not place exchange orders.
 
-Before a research run, pre-fill recent Binance candles so indicators have real history from the first live cycle:
+Before a research run, pre-fill recent Binance candles so indicators have real history from the first live cycle. The default target is 90 days of 1-minute BTCUSDT data, or 129,600 candles. The loader is resumable, so rerunning `make prefill` fetches only missing timestamps.
 
 ```bash
 make prefill
+```
+
+To run the checkpointed 90-day replay pipeline after prefill:
+
+```bash
+make run-90d
 ```
 
 From the repository root:
