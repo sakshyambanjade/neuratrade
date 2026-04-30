@@ -106,9 +106,9 @@ python run_v1_experiment.py --resume-model-run-id 2 --max-cycles 10080
 
 For the full V1 paper run, use autopilot mode from the repository root. It
 refreshes the historical candle prefill, runs the default five-model matrix one
-model at a time, resumes the latest unfinished run for each model, skips models
-that already reached the cycle target, and then switches to the next model
-automatically:
+model at a time, pulls any missing Ollama models, resumes the latest unfinished
+run for each model, skips models that already reached the cycle target, and
+then switches to the next model automatically:
 
 ```bash
 make v1-autopilot

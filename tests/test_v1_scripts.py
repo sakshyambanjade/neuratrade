@@ -5,7 +5,13 @@ from argparse import Namespace
 
 import pytest
 import run_v1_experiment as v1_runner
-from run_v1_experiment import PreflightError, candle_count, missing_ollama_models, selected_models
+from run_v1_experiment import (
+    PreflightError,
+    candle_count,
+    missing_ollama_models,
+    pull_ollama_models,
+    selected_models,
+)
 from scripts.confidence_analysis import (
     calibration_rows,
     correlation_summary,
@@ -126,6 +132,22 @@ def test_v1_runner_reports_missing_ollama_models():
     missing = missing_ollama_models({"qwen2.5:7b", "phi3:mini"}, ["qwen2.5:7b", "mistral:7b"])
 
     assert missing == ["mistral:7b"]
+
+
+def test_v1_runner_pulls_missing_models(monkeypatch):
+    captured = []
+
+    def fake_run(command, check):
+        captured.append((command, check))
+
+    monkeypatch.setattr(v1_runner.subprocess, "run", fake_run)
+
+    pull_ollama_models(["mistral:7b", "phi3:mini"])
+
+    assert captured == [
+        (["ollama", "pull", "mistral:7b"], True),
+        (["ollama", "pull", "phi3:mini"], True),
+    ]
 
 
 def test_v1_runner_resolves_resume_model_and_latest(tmp_path):
@@ -255,6 +277,7 @@ def test_v1_preflight_success_and_prefill_failure(tmp_path):
         skip_market_preflight=True,
         ollama_url="http://127.0.0.1:11434",
         ollama_timeout=1.0,
+        auto_pull_models=False,
     )
 
     v1_runner.run_preflight(["qwen2.5:7b"], args)
@@ -438,3 +461,31 @@ def test_v1_compare_loads_prices_and_collects_checkpointed_decisions(tmp_path, m
     assert len(decisions) == 2
     with pytest.raises(RuntimeError, match="Only 3 usable"):
         load_price_series(db_path, max_points=4)
+
+
+def test_v1_preflight_auto_pulls_missing_models(monkeypatch):
+    calls = []
+    model_sets = iter([{"qwen2.5:7b"}, {"qwen2.5:7b", "mistral:7b"}])
+
+    def fake_fetch(_url, *, timeout):
+        return next(model_sets)
+
+    def fake_pull(models):
+        calls.append(models)
+
+    monkeypatch.setattr(v1_runner, "fetch_ollama_models", fake_fetch)
+    monkeypatch.setattr(v1_runner, "pull_ollama_models", fake_pull)
+    args = Namespace(
+        db_path="unused.db",
+        min_prefill_candles=1,
+        skip_prefill_check=True,
+        skip_ollama_preflight=False,
+        skip_market_preflight=True,
+        ollama_url="http://127.0.0.1:11434",
+        ollama_timeout=1.0,
+        auto_pull_models=True,
+    )
+
+    v1_runner.run_preflight(["qwen2.5:7b", "mistral:7b"], args)
+
+    assert calls == [["mistral:7b"]]

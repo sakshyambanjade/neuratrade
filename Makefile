@@ -18,7 +18,7 @@ run-v1:
 	cd backend && "$(PYTHON)" run_v1_experiment.py
 
 v1-autopilot: prefill
-	cd backend && "$(PYTHON)" run_v1_experiment.py --all-models --auto-resume
+	cd backend && "$(PYTHON)" run_v1_experiment.py --all-models --auto-resume --auto-pull-models
 
 run-90d:
 	cd backend && "$(PYTHON)" scripts/run_90d_experiment.py --max-points "$(TARGET_POINTS)"

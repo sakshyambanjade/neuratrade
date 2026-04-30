@@ -18,6 +18,7 @@ import os
 import platform
 import socket
 import sqlite3
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -133,8 +134,14 @@ def run_preflight(models: list[str], args: argparse.Namespace) -> None:
         available_models = fetch_ollama_models(args.ollama_url, timeout=args.ollama_timeout)
         missing = missing_ollama_models(available_models, models)
         if missing:
-            commands = " && ".join(f"ollama pull {model}" for model in missing)
-            raise PreflightError(f"Missing Ollama model(s): {', '.join(missing)}. Run: {commands}")
+            if getattr(args, "auto_pull_models", False):
+                print(f"Preflight: pulling missing Ollama model(s): {', '.join(missing)}")
+                pull_ollama_models(missing)
+                available_models = fetch_ollama_models(args.ollama_url, timeout=args.ollama_timeout)
+                missing = missing_ollama_models(available_models, models)
+            if missing:
+                commands = " && ".join(f"ollama pull {model}" for model in missing)
+                raise PreflightError(f"Missing Ollama model(s): {', '.join(missing)}. Run: {commands}")
         print(f"Preflight: Ollama OK ({', '.join(models)})")
 
     if args.skip_market_preflight:
@@ -172,6 +179,17 @@ def fetch_ollama_models(ollama_url: str, *, timeout: float) -> set[str]:
 
 def missing_ollama_models(available_models: set[str], requested_models: list[str]) -> list[str]:
     return [model for model in requested_models if model not in available_models]
+
+
+def pull_ollama_models(models: list[str]) -> None:
+    for model in models:
+        print(f"Preflight: ollama pull {model}")
+        try:
+            subprocess.run(["ollama", "pull", model], check=True)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise PreflightError(
+                f"Failed to pull Ollama model {model!r}. Start Ollama and retry. Error: {exc}"
+            ) from exc
 
 
 def check_binance_dns(hosts: tuple[str, ...] = BINANCE_PREFLIGHT_HOSTS) -> None:
@@ -227,6 +245,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--db-path", default=DB_PATH, help="SQLite DB path used for the candle prefill check.")
     parser.add_argument("--ollama-url", default=OLLAMA_URL, help="Ollama base URL used for model preflight.")
     parser.add_argument("--ollama-timeout", type=float, default=5.0, help="Seconds to wait for Ollama preflight.")
+    parser.add_argument(
+        "--auto-pull-models",
+        action="store_true",
+        help="Automatically run `ollama pull` for missing requested models during preflight.",
+    )
     parser.add_argument(
         "--min-prefill-candles",
         type=int,
