@@ -139,6 +139,36 @@ def parse_ollama_decision(body: dict[str, Any]) -> OllamaDecision:
         raise OllamaDecisionError("Ollama response field missing or invalid")
 
     try:
-        return OllamaDecision.model_validate(data)
+        return OllamaDecision.model_validate(_normalize_decision_payload(data))
     except ValidationError as exc:
-        raise OllamaDecisionError("Ollama decision did not match schema") from exc
+        raise OllamaDecisionError(f"Ollama decision did not match schema: {exc}") from exc
+
+
+def _normalize_decision_payload(data: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(data)
+    action = str(normalized.get("action", "HOLD")).strip().upper()
+    normalized["action"] = action
+
+    confidence = normalized.get("confidence", 0.0)
+    try:
+        confidence_value = float(confidence)
+    except (TypeError, ValueError):
+        confidence_value = 0.0
+    if 1.0 < confidence_value <= 100.0:
+        confidence_value = confidence_value / 100.0
+    normalized["confidence"] = confidence_value
+
+    position_size_pct = normalized.get("position_size_pct", 0.0)
+    try:
+        position_size_value = float(position_size_pct)
+    except (TypeError, ValueError):
+        position_size_value = 0.0
+    if 1.0 < position_size_value <= 100.0:
+        position_size_value = position_size_value / 100.0
+    normalized["position_size_pct"] = 0.0 if action == "HOLD" else position_size_value
+    if action == "HOLD":
+        if normalized.get("stop_loss") is None:
+            normalized["stop_loss"] = 0.0
+        if normalized.get("take_profit") is None:
+            normalized["take_profit"] = 0.0
+    return normalized

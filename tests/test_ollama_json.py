@@ -58,3 +58,23 @@ def test_ollama_timeout_returns_hold_fallback():
     assert decision.confidence == 0.0
     assert decision.position_size_pct == 0.0
     assert "unavailable" in decision.reasoning
+
+
+def test_ollama_parser_normalizes_common_model_variants():
+    decision = parse_ollama_decision(
+        {
+            "response": (
+                "```json\n"
+                '{"action":"HOLD","confidence":50,"position_size_pct":20,'
+                '"reasoning":"The safest paper trading action is hold while indicators are incomplete.",'
+                '"stop_loss":null,"take_profit":null}'
+                "\n```"
+            )
+        }
+    )
+
+    assert decision.action == "HOLD"
+    assert decision.confidence == 0.5
+    assert decision.position_size_pct == 0.0
+    assert decision.stop_loss == 0.0
+    assert decision.take_profit == 0.0

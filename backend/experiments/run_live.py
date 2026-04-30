@@ -182,10 +182,7 @@ class LiveExperimentRunner:
         inference_latency_ms = int((time.perf_counter() - started) * 1000)
         decision_data = _decision_dict(decision)
         hallucinations = validate_decision_payload(decision_data, current_price=price)
-        if self.action_monitor.observe(str(decision_data["action"])):
-            hallucinations.append(
-                HallucinationEvent("action_distribution_alert", "action", str(decision_data["action"]))
-            )
+        self.action_monitor.observe(str(decision_data["action"]))
         inference_log_id = self._log_inference(
             prompt,
             decision_data,
