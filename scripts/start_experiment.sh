@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MODEL="${LLM_MODEL:-${1:-llama3.2:1b}}"
+MODEL="${LLM_MODEL:-${1:-qwen2.5:7b}}"
 ARTIFACT_DIR="${ARTIFACT_DIR:-$ROOT_DIR/artifacts/live}"
 MAX_CYCLES="${MAX_CYCLES:-10}"
 CYCLE_INTERVAL_SECONDS="${CYCLE_INTERVAL_SECONDS:-60}"

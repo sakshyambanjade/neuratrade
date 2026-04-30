@@ -12,16 +12,22 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import platform
+import socket
+import sqlite3
 import sys
 from pathlib import Path
+from urllib.error import URLError
+from urllib.parse import urljoin
+from urllib.request import urlopen
 
 BACKEND_DIR = Path(__file__).resolve().parent
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from config import SYMBOL  # noqa: E402
+from config import DB_PATH, OLLAMA_URL, SYMBOL  # noqa: E402
 
 from experiments.run_live import LiveExperimentRunner, LiveRunConfig  # noqa: E402
 
@@ -33,6 +39,12 @@ V1_MODELS = [
     "phi3:mini",
 ]
 DEFAULT_MAX_CYCLES = 10_080
+DEFAULT_MIN_PREFILL_CANDLES = 129_600
+BINANCE_PREFLIGHT_HOSTS = ("stream.binance.com", "api.binance.com")
+
+
+class PreflightError(RuntimeError):
+    pass
 
 
 async def run_model(model_name: str, args: argparse.Namespace) -> None:
@@ -64,6 +76,77 @@ async def run_model(model_name: str, args: argparse.Namespace) -> None:
 async def run_selected_models(models: list[str], args: argparse.Namespace) -> None:
     for model_name in models:
         await run_model(model_name, args)
+
+
+def run_preflight(models: list[str], args: argparse.Namespace) -> None:
+    print("Preflight: V1 paper-trading safety checks")
+
+    if args.skip_prefill_check:
+        print("Preflight: candle prefill check skipped")
+    else:
+        candles = candle_count(args.db_path)
+        if candles < args.min_prefill_candles:
+            raise PreflightError(
+                f"Only {candles} candle(s) found in {args.db_path}; need at least {args.min_prefill_candles}. "
+                "Run `make prefill` before collecting V1 research data."
+            )
+        print(f"Preflight: candle history OK ({candles} candles)")
+
+    if args.skip_ollama_preflight:
+        print("Preflight: Ollama check skipped")
+    else:
+        available_models = fetch_ollama_models(args.ollama_url, timeout=args.ollama_timeout)
+        missing = missing_ollama_models(available_models, models)
+        if missing:
+            commands = " && ".join(f"ollama pull {model}" for model in missing)
+            raise PreflightError(f"Missing Ollama model(s): {', '.join(missing)}. Run: {commands}")
+        print(f"Preflight: Ollama OK ({', '.join(models)})")
+
+    if args.skip_market_preflight:
+        print("Preflight: Binance DNS check skipped")
+    else:
+        check_binance_dns()
+        print("Preflight: Binance DNS OK")
+
+    print("Preflight: complete; starting live runner")
+
+
+def candle_count(db_path: str | Path) -> int:
+    path = Path(db_path)
+    if not path.exists():
+        return 0
+    try:
+        with sqlite3.connect(path) as connection:
+            row = connection.execute("SELECT COUNT(*) FROM candles WHERE close IS NOT NULL AND close > 0").fetchone()
+    except sqlite3.Error:
+        return 0
+    return int(row[0]) if row else 0
+
+
+def fetch_ollama_models(ollama_url: str, *, timeout: float) -> set[str]:
+    tags_url = urljoin(ollama_url.rstrip("/") + "/", "api/tags")
+    try:
+        with urlopen(tags_url, timeout=timeout) as response:  # noqa: S310
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, URLError, json.JSONDecodeError) as exc:
+        raise PreflightError(
+            f"Cannot reach Ollama at {ollama_url}. Start it with `ollama serve`. Error: {exc}"
+        ) from exc
+    return {str(row.get("name", "")) for row in payload.get("models", []) if isinstance(row, dict)}
+
+
+def missing_ollama_models(available_models: set[str], requested_models: list[str]) -> list[str]:
+    return [model for model in requested_models if model not in available_models]
+
+
+def check_binance_dns(hosts: tuple[str, ...] = BINANCE_PREFLIGHT_HOSTS) -> None:
+    for host in hosts:
+        try:
+            socket.getaddrinfo(host, 443)
+        except OSError as exc:
+            raise PreflightError(
+                f"Cannot resolve {host}. Check DNS/network/VPN before starting the live feed."
+            ) from exc
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -106,6 +189,19 @@ def build_parser() -> argparse.ArgumentParser:
         default=15.0,
         help="Seconds to wait for the Binance WebSocket snapshot before cycle 1.",
     )
+    parser.add_argument("--db-path", default=DB_PATH, help="SQLite DB path used for the candle prefill check.")
+    parser.add_argument("--ollama-url", default=OLLAMA_URL, help="Ollama base URL used for model preflight.")
+    parser.add_argument("--ollama-timeout", type=float, default=5.0, help="Seconds to wait for Ollama preflight.")
+    parser.add_argument(
+        "--min-prefill-candles",
+        type=int,
+        default=int(os.getenv("V1_MIN_PREFILL_CANDLES", DEFAULT_MIN_PREFILL_CANDLES)),
+        help="Minimum warm candle count required before a V1 run starts.",
+    )
+    parser.add_argument("--skip-prefill-check", action="store_true", help="Bypass the candle-history preflight.")
+    parser.add_argument("--skip-ollama-preflight", action="store_true", help="Bypass the Ollama server/model check.")
+    parser.add_argument("--skip-market-preflight", action="store_true", help="Bypass the Binance DNS check.")
+    parser.add_argument("--preflight-only", action="store_true", help="Run checks and exit without starting cycles.")
     return parser
 
 
@@ -123,7 +219,15 @@ def _slug(value: str) -> str:
 
 def main() -> None:
     args = build_parser().parse_args()
-    asyncio.run(run_selected_models(selected_models(args), args))
+    models = selected_models(args)
+    try:
+        run_preflight(models, args)
+    except PreflightError as exc:
+        print(f"Preflight failed: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
+    if args.preflight_only:
+        return
+    asyncio.run(run_selected_models(models, args))
 
 
 if __name__ == "__main__":

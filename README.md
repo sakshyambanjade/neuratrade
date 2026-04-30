@@ -44,7 +44,7 @@ Install and start Ollama, then pull a local model:
 
 ```bash
 ollama serve
-ollama pull llama3.2:1b
+ollama pull qwen2.5:7b
 ```
 
 Configure the backend:
@@ -57,7 +57,7 @@ Set at least:
 
 ```env
 OLLAMA_URL=http://127.0.0.1:11434
-LLM_MODEL=llama3.2:1b
+LLM_MODEL=qwen2.5:7b
 DB_PATH=trading.db
 API_KEY=dev-key
 ```
@@ -90,22 +90,7 @@ From the repository root:
 
 ```bash
 cd backend
-python - <<'PY'
-import asyncio
-from experiments.run_live import LiveExperimentRunner, LiveRunConfig
-
-config = LiveRunConfig(
-    model_name="llama3.2:1b",
-    symbol="BTCUSDT",
-    experiment_name="btc-live-dry-run",
-    cycle_interval_seconds=60,
-    max_cycles=10,
-    dry_run=True,
-)
-
-state = asyncio.run(LiveExperimentRunner(config).start())
-print(state.model_dump())
-PY
+python run_v1_experiment.py --model qwen2.5:7b --max-cycles 10 --experiment-prefix smoke
 ```
 
 Use a short `max_cycles` value while testing. Omit it for a longer supervised run, and stop the process with `Ctrl-C`.

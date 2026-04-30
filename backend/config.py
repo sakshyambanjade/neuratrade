@@ -44,7 +44,7 @@ MIN_CONFIDENCE = float(os.getenv("MIN_CONFIDENCE", 0.35))
 
 # LLM / Brain
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
-LLM_MODEL = os.getenv("LLM_MODEL", "tinyllama")
+LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5:7b")
 LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", 60))
 BRAIN_URL = os.getenv("BRAIN_URL", "http://127.0.0.1:8742")
 BRAIN_SECRET = os.getenv("BRAIN_SECRET", "dev-secret")
